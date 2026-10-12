@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add experimental native TCP/UDP receive/send rates per process and app group, with PID-reuse protection and unavailable fallbacks; no helper or third-party package.
+- Remove unsupported Windows Power usage/trend columns and fix duplicated resource totals when hiding the last table column.
+
 - Keep CPU chart and Performance resource right-click menus stable across live monitoring updates.
 
 - Label logical CPU charts with verified performance/efficiency core types and clarify graph time endpoints.

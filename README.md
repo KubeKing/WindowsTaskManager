@@ -22,6 +22,7 @@ The build produces `build/Task Manager.app`, signed locally with an ad-hoc signa
 ## Use
 
 - **Processes / Details:** search names, users, paths or PIDs; click headers to sort; select a process to inspect, copy details, reveal its executable, quit or force quit. Process actions validate its creation time as well as PID.
+- **Per-app network:** experimental native TCP/UDP receive + send rates in Processes, Details and Users, grouped across app helpers. Includes loopback; protected/unobserved processes show dashes. Hover a process Network cell for receive/send breakdown. No administrator access, packet capture or external connection. Windows Power usage/trend columns are omitted because their scale has no direct Mac equivalent.
 - **Performance:** separate CPU, Memory, disk, network-adapter and GPU layouts based on Windows reference frames; switch CPU between overall and logical-processor graphs, and toggle kernel times. Unsupported counters remain dashes. The initial sample establishes rate baselines. Per-process CPU uses a whole-machine 0–100% convention, unlike Activity Monitor's per-core convention.
 - **Logical CPU charts:** P/E badges identify performance and efficiency cores using OS logical CPU IDs; unknown types stay unknown. The time axis shows the visible span ago through the latest sample, including when monitoring is paused.
 - **CPU speed:** experimental native IOReport readings show active-time-weighted P-core and E-core GHz without administrator access. Unknown states, unsupported tables or unavailable private APIs stay marked unavailable.

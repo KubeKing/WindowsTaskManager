@@ -36,12 +36,13 @@ struct InventoryPage: View {
                 values["disk"] = MetricFormat.rate(sum(processes.map { p in
                     guard let read = p.readBytesPerSecond, let write = p.writeBytesPerSecond else { return nil }; return read + write
                 }))
-                values["network"] = "—"
+                values["network"] = MetricFormat.rate(sum(processes.map(\.networkBytesPerSecond)))
+                sortValues["network"] = sum(processes.map(\.networkBytesPerSecond))
                 sortValues["cpu"] = sum(processes.map(\.cpuPercent))
                 sortValues["memory"] = sum(processes.map { $0.memoryBytes.map { Double($0) } })
                 sortValues["disk"] = sum(processes.map { p in p.readBytesPerSecond.flatMap { read in p.writeBytesPerSecond.map { read + $0 } } })
                 children = processes.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }.map { p in
-                    AuxiliaryRow(id: "process:\(p.id.pid):\(p.id.startTime)", values: ["name": p.name, "status": p.status ?? "—", "cpu": MetricFormat.percent(p.cpuPercent), "memory": MetricFormat.bytes(p.memoryBytes), "disk": MetricFormat.rate(p.readBytesPerSecond.flatMap { read in p.writeBytesPerSecond.map { read + $0 } }), "network": "—"], path: p.executablePath, iconPath: p.applicationPath ?? p.executablePath, symbol: "gearshape", processID: p.id, sortValues: ["cpu": p.cpuPercent ?? -1, "memory": p.memoryBytes.map { Double($0) } ?? -1, "disk": p.readBytesPerSecond.flatMap { read in p.writeBytesPerSecond.map { read + $0 } } ?? -1])
+                    AuxiliaryRow(id: "process:\(p.id.pid):\(p.id.startTime)", values: ["name": p.name, "status": p.status ?? "—", "cpu": MetricFormat.percent(p.cpuPercent), "memory": MetricFormat.bytes(p.memoryBytes), "disk": MetricFormat.rate(p.readBytesPerSecond.flatMap { read in p.writeBytesPerSecond.map { read + $0 } }), "network": MetricFormat.rate(p.networkBytesPerSecond)], path: p.executablePath, iconPath: p.applicationPath ?? p.executablePath, symbol: "gearshape", processID: p.id, sortValues: ["network": p.networkBytesPerSecond ?? -1, "cpu": p.cpuPercent ?? -1, "memory": p.memoryBytes.map { Double($0) } ?? -1, "disk": p.readBytesPerSecond.flatMap { read in p.writeBytesPerSecond.map { read + $0 } } ?? -1])
                 }
             } else if kind == .startup {
                 // The configured executable is not evidence of a signed publisher or a boot measurement.
@@ -56,7 +57,7 @@ struct InventoryPage: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            AuxiliaryTable(columns: columns, rows: rows, appearance: store.appearance, headerTotals: kind == .users ? ["cpu": MetricFormat.percent(store.snapshot.cpuUsage), "memory": MetricFormat.percent(store.snapshot.memory.usedPercent), "disk": MetricFormat.rate(store.totalDiskRate), "network": MetricFormat.rate(store.totalNetworkRate)] : [:], onProcess: { identity in store.query = ""; store.selection = identity; store.page = .details })
+            AuxiliaryTable(columns: columns, rows: rows, appearance: store.appearance, headerTotals: kind == .users ? ["cpu": MetricFormat.percent(store.snapshot.cpuUsage), "memory": MetricFormat.percent(store.snapshot.memory.usedPercent), "disk": MetricFormat.rate(store.totalDiskRate), "network": MetricFormat.rate(sum(store.snapshot.processes.map(\.networkBytesPerSecond)))] : [:], onProcess: { identity in store.query = ""; store.selection = identity; store.page = .details })
             if entries.isEmpty {
                 ContentUnavailableView(store.query.isEmpty ? "No accessible items" : "No matches", systemImage: "magnifyingglass", description: Text(store.query.isEmpty ? "Refresh to read the local inventory." : "Try a different search.")).frame(maxHeight: 140)
             }
@@ -77,7 +78,7 @@ struct InventoryPage: View {
     private var explanation: String {
         switch kind {
         case .startup: return "Configured launch agents. Publisher and startup impact are not measured; load state does not prove startup permissions. Use Open Login Items to manage startup permissions."
-        case .users: return "Expand a user to see accessible processes. Totals cover that user's accessible processes. Per-process network and disconnect controls are unavailable."
+        case .users: return "Expand a user to see accessible processes. Totals cover that user's accessible processes. Network totals are experimental observed TCP/UDP rates, including loopback; protected or unobserved processes remain unavailable. Disconnect controls are unavailable."
         default: return "macOS launchd jobs. PID and running state are shown only when reported by launchctl; configured system jobs have unknown runtime state. Group identifies the launchd job kind."
         }
     }
@@ -105,7 +106,7 @@ struct HistoryPage: View {
                 ContentUnavailableView(store.historyEnabled ? "Building your history" : "History recording is off", systemImage: "clock.arrow.circlepath", description: Text("Enable Record locally to collect observed CPU time. Records stay on this Mac.")).frame(maxHeight: 160)
             }
             Divider()
-            CapabilityNote(text: "Observed activity only · 30 days retained locally. Network, metered network and notification history are unavailable on macOS. Right-click a column header to show observed disk activity.")
+            CapabilityNote(text: "Observed activity only · 30 days retained locally. Network history is not recorded in this build. Retrospective metered-network and notification history are unavailable. Right-click a column header to show observed disk activity.")
         }
     }
     private func cpuTime(_ value: Double) -> String {
@@ -434,7 +435,7 @@ struct SettingsPage: View {
                         Divider()
                         VStack(alignment: .leading, spacing: 10) {
                             Text("CPU is reported as a share of this Mac's total capacity. P/E speed readings use experimental local IOReport counters and exclude idle time. Unsupported or unvalidated counters appear as a dash (—).")
-                            Text("GPU activity and memory use are read from available local driver counters. Separate Windows GPU engines, Neural Engine utilization, per-process network, startup impact, protected service controls and user disconnect are unavailable. Startup and services are read-only local inventories.")
+                            Text("GPU activity and memory use are read from available local driver counters. Experimental per-process TCP/UDP rates use local native counters and remain unavailable when unsupported or inaccessible. Separate Windows GPU engines, Neural Engine utilization, startup impact, protected service controls and user disconnect are unavailable. Startup and services are read-only local inventories.")
                             Text("Task Manager runs with your permissions and does not install an administrator helper.")
                             ForEach(Array(Set(store.snapshot.warnings + store.inventory.warnings)).sorted(), id: \.self) { Text($0) }
                         }.font(.system(size: 11)).foregroundStyle(.secondary).padding(16).frame(maxWidth: .infinity, alignment: .leading)

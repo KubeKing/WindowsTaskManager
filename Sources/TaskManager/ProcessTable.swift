@@ -84,9 +84,9 @@ struct ProcessTable: NSViewRepresentable {
             for column in table.tableColumns { table.removeTableColumn(column) }
             let columns: [(String, String, CGFloat)]
             if details {
-                columns = [("name", "Name", 190), ("pid", "PID", 55), ("status", "Status", 80), ("user", "User name", 100), ("cpu", "CPU", 65), ("memory", "Memory", 95), ("architecture", "Architecture", 90), ("description", "Description", 200), ("cpuTime", "CPU time", 95), ("threads", "Threads", 66), ("started", "Started", 125), ("path", "Executable path", 280)]
+                columns = [("name", "Name", 190), ("pid", "PID", 55), ("status", "Status", 80), ("user", "User name", 100), ("cpu", "CPU", 65), ("memory", "Memory", 95), ("architecture", "Architecture", 90), ("description", "Description", 200), ("cpuTime", "CPU time", 95), ("network", "Network", 95), ("threads", "Threads", 66), ("started", "Started", 125), ("path", "Executable path", 280)]
             } else {
-                columns = [("name", "Name", 245), ("status", "Status", 90), ("cpu", "CPU", 70), ("memory", "Memory", 90), ("disk", "Disk", 85), ("network", "Network", 85), ("power", "Power usage", 105), ("powerTrend", "Power usage trend", 110)]
+                columns = [("name", "Name", 245), ("status", "Status", 90), ("cpu", "CPU", 70), ("memory", "Memory", 90), ("disk", "Disk", 85), ("network", "Network", 85)]
             }
             for (id, title, width) in columns {
                 let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id))
@@ -133,6 +133,8 @@ struct ProcessTable: NSViewRepresentable {
             }
             sender.state = column.isHidden ? .off : .on
             table.sizeLastColumnToFit(); table.enclosingScrollView?.tile()
+            table.headerView?.needsDisplay = true
+            table.needsDisplay = true
         }
         func sorted(_ values: [ProcessRecord]) -> [ProcessRecord] {
             let descriptor = table?.sortDescriptors.first ?? NSSortDescriptor(key: "name", ascending: true)
@@ -142,7 +144,7 @@ struct ProcessTable: NSViewRepresentable {
                 case "name": comparison = a.name.localizedStandardCompare(b.name)
                 case "status": comparison = (a.status ?? "").localizedStandardCompare(b.status ?? "")
                 case "cpuTime": comparison = compare(a.totalCPUSeconds, b.totalCPUSeconds)
-                case "network", "power", "powerTrend": comparison = a.name.localizedStandardCompare(b.name)
+                case "network": comparison = compare(a.networkBytesPerSecond, b.networkBytesPerSecond)
                 case "user": comparison = a.user.localizedStandardCompare(b.user)
                 case "description": comparison = descriptionFor(a).localizedStandardCompare(descriptionFor(b))
                 case "architecture": comparison = a.name.localizedStandardCompare(b.name)
@@ -172,6 +174,7 @@ struct ProcessTable: NSViewRepresentable {
                 result = an.localizedStandardCompare(bn)
             case "memory": result = compare(sum(lhs.map { $0.memoryBytes.map { Double($0) } }), sum(rhs.map { $0.memoryBytes.map { Double($0) } }))
             case "disk": result = compare(sum(lhs.map(diskRate)), sum(rhs.map(diskRate)))
+            case "network": result = compare(sum(lhs.map(\.networkBytesPerSecond)), sum(rhs.map(\.networkBytesPerSecond)))
             case "pid": result = compare(Double(a.id.pid), Double(b.id.pid))
             default: result = compare(sum(lhs.map(\.cpuPercent)), sum(rhs.map(\.cpuPercent)))
             }
@@ -301,18 +304,19 @@ struct ProcessTable: NSViewRepresentable {
                     if id == "cpu" { value = MetricFormat.percent(sum(members.map(\.cpuPercent))) }
                     else if id == "memory" { value = MetricFormat.bytes(sum(members.map { $0.memoryBytes.map { Double($0) } }).map { UInt64(max(0, $0)) }) }
                     else if id == "disk" { value = MetricFormat.rate(sum(members.map(diskRate))) }
+                    else if id == "network" { value = MetricFormat.rate(sum(members.map(\.networkBytesPerSecond))) }
                     else if id == "status" { value = members.compactMap(\.status).contains("Running") ? "Running" : members.compactMap(\.status).first ?? "—" }
                     else { value = "—" }
                     let field = NSTextField(labelWithString: value)
                     field.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular); field.alignment = id == "status" ? .left : .right
                     field.textColor = .labelColor; field.translatesAutoresizingMaskIntoConstraints = false; cell.addSubview(field)
                     NSLayoutConstraint.activate([field.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -9), field.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6), field.centerYAnchor.constraint(equalTo: cell.centerYAnchor)])
-                    if ["cpu", "memory", "disk", "network", "power", "powerTrend"].contains(id) {
+                    if ["cpu", "memory", "disk", "network"].contains(id) {
                         cell.wantsLayer = true
                         let intensity = id == "cpu" ? min(0.3, (sum(members.map(\.cpuPercent)) ?? 0) / 100) : id == "memory" ? min(0.3, (sum(members.map { $0.memoryBytes.map { Double($0) } }) ?? 0) / max(1, Double(store.snapshot.memory.totalBytes))) : 0
                         cell.layer?.backgroundColor = (store.appearance == .windows ? NSColor.systemBlue : NSColor.controlAccentColor).withAlphaComponent(0.045 + intensity).cgColor
                     }
-                    if ["network", "power", "powerTrend"].contains(id) { cell.toolTip = "No supported per-process \(id == "network" ? "network" : "power") counter is available on macOS." }
+                    if id == "network" { cell.toolTip = store.snapshot.processNetworkNote }
                 }
                 return cell
             }
@@ -335,14 +339,16 @@ struct ProcessTable: NSViewRepresentable {
             case "cpu": value = MetricFormat.percent(record.cpuPercent); intensity = min(0.8, (record.cpuPercent ?? 0) / 60)
             case "memory": value = MetricFormat.bytes(record.memoryBytes); intensity = min(0.7, Double(record.memoryBytes ?? 0) / max(1, Double(store.snapshot.memory.totalBytes)) * 3)
             case "disk": value = MetricFormat.rate(diskRate(record)); intensity = min(0.7, (diskRate(record) ?? 0) / 20_000_000)
+            case "network": value = MetricFormat.rate(record.networkBytesPerSecond); intensity = min(0.7, (record.networkBytesPerSecond ?? 0) / 20_000_000)
             case "threads": value = record.threadCount.map(String.init) ?? "—"
             case "started": value = record.id.startTime == 0 ? "—" : Date(timeIntervalSince1970: Double(record.id.startTime) / 1_000_000).formatted(date: .omitted, time: .shortened)
             default: value = "—"
             }
             cell.label.stringValue = value
             cell.toolTip = id == "name" ? record.executablePath : value == "—" ? "Not available or permission restricted" : nil
+            if id == "network" { cell.toolTip = "Receive: \(MetricFormat.rate(record.networkReceivedBytesPerSecond)) · Send: \(MetricFormat.rate(record.networkSentBytesPerSecond))\n" + store.snapshot.processNetworkNote }
             cell.heatColor = store.appearance == .windows ? .systemBlue : .controlAccentColor
-            cell.heat = ["cpu", "memory", "disk", "network", "power", "powerTrend"].contains(id) ? 0.035 + intensity * 0.3 : 0
+            cell.heat = ["cpu", "memory", "disk", "network"].contains(id) ? 0.035 + intensity * 0.3 : 0
             if id == "name" {
                 let path = record.applicationPath ?? record.executablePath
                 if let path {
@@ -369,12 +375,13 @@ struct ProcessTable: NSViewRepresentable {
                     case "cpu": header.total = store.snapshot.cpuUsage.map { String(format: "%.0f%%", $0) } ?? "—"
                     case "memory": header.total = store.snapshot.memory.usedPercent.map { String(format: "%.0f%%", $0) } ?? "—"
                     case "disk": header.total = MetricFormat.rate(store.totalDiskRate)
-                    case "network": header.total = MetricFormat.rate(store.totalNetworkRate)
+                    case "network": header.total = MetricFormat.rate(sum(store.snapshot.processes.map(\.networkBytesPerSecond)))
                     default: header.total = nil
                     }
                 }
+                column.headerToolTip = column.identifier.rawValue == "network" ? "Sum of observed accessible process TCP/UDP rates, including loopback. " + store.snapshot.processNetworkNote : nil
                 header.tall = details != true
-                header.resource = ["cpu", "memory", "disk", "network", "power", "powerTrend"].contains(column.identifier.rawValue)
+                header.resource = ["cpu", "memory", "disk", "network"].contains(column.identifier.rawValue)
                 header.sortAscending = table.sortDescriptors.first?.key == column.identifier.rawValue ? table.sortDescriptors.first?.ascending : nil
             }
             table.headerView?.needsDisplay = true
@@ -446,6 +453,16 @@ final class ResourceHeaderCell: NSTableHeaderCell {
     var sortAscending: Bool?
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
         NSColor.textBackgroundColor.setFill(); cellFrame.fill()
+        // AppKit also uses the last header cell to paint trailing filler. Its
+        // custom resource total must only be drawn inside its actual column.
+        guard let header = controlView as? NSTableHeaderView, let table = header.tableView,
+              let index = table.tableColumns.firstIndex(where: { $0.headerCell === self }),
+              !table.tableColumns[index].isHidden else { return }
+        let columnFrame = header.headerRect(ofColumn: index).intersection(cellFrame)
+        guard !columnFrame.isEmpty else { return }
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        columnFrame.clip()
         let paragraph = NSMutableParagraphStyle(); paragraph.alignment = resource ? .right : .left
         paragraph.lineBreakMode = .byTruncatingTail
         let labelAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: paragraph]

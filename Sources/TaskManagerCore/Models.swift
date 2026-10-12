@@ -24,6 +24,12 @@ public struct ProcessRecord: Identifiable, Hashable, Sendable {
     public var readBytesPerSecond: Double? = nil
     public var writeBytesPerSecond: Double? = nil
     public var totalCPUSeconds: Double? = nil
+    public var networkReceivedBytesPerSecond: Double? = nil
+    public var networkSentBytesPerSecond: Double? = nil
+    public var networkBytesPerSecond: Double? {
+        guard let received = networkReceivedBytesPerSecond, let sent = networkSentBytesPerSecond else { return nil }
+        return received + sent
+    }
     public var isApplication: Bool { applicationPath != nil }
     public init(id: ProcessIdentity, name: String) { self.id = id; self.name = name }
 }
@@ -118,6 +124,7 @@ public struct SystemSnapshot: Sendable {
     public var logicalKernelUsage: [Double] = []
     public var memory: MemoryMetrics = .init()
     public var networks: [NetworkMetrics] = []
+    public var processNetworkNote = "Per-process network counters have not been sampled."
     public var disks: [DiskMetrics] = []
     public var gpus: [GPUMetrics] = []
     public var uptime: Double = 0

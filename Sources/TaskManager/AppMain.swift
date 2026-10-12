@@ -9,8 +9,10 @@ enum AppMain {
         if CommandLine.arguments.contains("--sample") {
             let sampler = SystemSampler()
             _ = sampler.sample(); Thread.sleep(forTimeInterval: 1)
+            _ = sampler.sample(); Thread.sleep(forTimeInterval: 1)
             let value = sampler.sample()
             print("Processes: \(value.processes.count), CPU: \(value.cpuUsage.map { String(format: "%.2f%%", $0) } ?? "unavailable"), memory: \(value.memory.usedBytes)/\(value.memory.totalBytes), sampler: \(String(format: "%.2f ms", value.collectionDuration * 1000))")
+            print("Per-process network: \(value.processes.filter { $0.networkBytesPerSecond != nil }.count) attributed processes, \(MetricFormat.rate(value.processes.compactMap(\.networkBytesPerSecond).reduce(0, +))) observed TCP/UDP")
             print("CPU: \(value.cpuName), cores: \(value.logicalCPUCount), interfaces: \(value.networks.map(\.name)), disks: \(value.disks.map(\.mountPath))")
             print("CPU frequency (experimental): P=\(value.cpuFrequency.performanceMHz.map { String(format: "%.0f MHz", $0) } ?? "unavailable"), E=\(value.cpuFrequency.efficiencyMHz.map { String(format: "%.0f MHz", $0) } ?? "unavailable")")
             for disk in value.disks { print("Storage: \(disk.name) · \(disk.bsdName ?? "unknown") · \(disk.kind.rawValue) · capacity=\(disk.totalBytes) · volumes=\(disk.volumes.count) · used=\(disk.primaryVolume?.usedBytes.description ?? "unavailable")") }

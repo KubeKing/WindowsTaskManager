@@ -21,6 +21,7 @@ public final class SystemSampler {
     }()
     private let gpuSampler = GPUSampler()
     private let frequencySampler = CPUFrequencySampler()
+    private let processNetworkSampler = ProcessNetworkSampler()
     private let processorCount = ProcessInfo.processInfo.activeProcessorCount
     private let processorName: String
     private var interfaceNames: [String: String] = [:]
@@ -65,6 +66,7 @@ public final class SystemSampler {
         result.logicalCPUCount = processorCount
         result.cpuName = processorName
         result.processes = processes(elapsed: elapsed)
+        result.processNetworkNote = processNetworkSampler.apply(to: &result.processes, now: started, elapsed: elapsed)
         let cpu = cpuMetrics()
         result.cpuFrequency = frequencySampler.sample()
         result.cpuUsage = cpu.total
@@ -96,7 +98,7 @@ public final class SystemSampler {
         }
     }
 
-    private static func bsdInfo(_ pid: Int32) -> proc_bsdinfo? {
+    static func bsdInfo(_ pid: Int32) -> proc_bsdinfo? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
         guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
