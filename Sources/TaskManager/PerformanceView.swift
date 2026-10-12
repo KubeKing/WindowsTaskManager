@@ -116,21 +116,23 @@ struct PerformanceView: View {
     }
     @ViewBuilder private func cpuContent(height: CGFloat, width: CGFloat) -> some View {
         VStack(spacing: 5) {
-            axis("% Utilization", maximum: "100%")
             if store.cpuGraphLogical {
+                Text("P · Performance cores    E · Efficiency cores").font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 let count = max(1, hardware.logicalCPUs)
                 let columns = count > 16 ? 6 : count > 8 ? 5 : count > 4 ? 4 : 2
                 let rows = (count + columns - 1) / columns
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                     ForEach(0..<count, id: \.self) { index in
-                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1)", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil)
+                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil)
                         .frame(height: (height - CGFloat(rows - 1) * 8) / CGFloat(rows))
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Logical processor \(index + 1)")
-                        .help("Logical processor \(index + 1) · 0–100% utilization")
+                        .accessibilityLabel("Logical processor \(index + 1), \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core, \(MetricFormat.percent(store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil))")
+                        .help("Logical processor \(index + 1) · \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core · 0–100% utilization")
                     }
                 }
             } else {
+                axis("% Utilization", maximum: "100%")
                 ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue).frame(height: height)
             }
             timeAxis
@@ -290,7 +292,13 @@ struct PerformanceView: View {
         VStack(spacing: 5) { axis(label, maximum: maximumLabel); ResourcePlot(values: values, dates: dates, secondValues: second, maximum: maximum, color: tint).frame(height: height).overlay { if !values.contains(where: { $0 != nil }) { Text("—").font(.system(size: 16)).foregroundStyle(.secondary) } }; timeAxis }
     }
     private func axis(_ label: String, maximum: String) -> some View { HStack { Text(label); Spacer(); Text(maximum) }.font(.system(size: 11)).foregroundStyle(.secondary) }
-    private var timeAxis: some View { HStack { Text("\(Int(max(60, (dates.last ?? Date()).timeIntervalSince(dates.first ?? Date())))) seconds"); Spacer(); Text("0") }.font(.system(size: 10)).foregroundStyle(.secondary) }
+    private var timeAxis: some View {
+        let seconds = Int(max(60, (dates.last ?? Date()).timeIntervalSince(dates.first ?? Date())))
+        let span = seconds < 60 ? "\(seconds)s" : seconds % 60 == 0 ? "\(seconds / 60)m" : "\(seconds / 60)m \(seconds % 60)s"
+        return HStack { Text(span + " ago"); Spacer(); Text("Latest sample") }
+            .font(.system(size: 10)).foregroundStyle(.secondary)
+            .help("Time runs from older samples on the left to the latest recorded sample on the right. The graph shows at least one minute; its span depends on sampling speed and pauses.")
+    }
     private func metric(_ title: String, _ value: String, size: CGFloat = 24, help: String = "") -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(.system(size: 11)).foregroundStyle(.secondary); Text(value).font(.system(size: size, weight: .regular)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8) }.help(help)
     }

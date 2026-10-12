@@ -41,3 +41,10 @@ The experimental native CPU reader returned live P-core and E-core GHz without a
 Native UI checks confirmed both measured speed fields, a used/available filesystem capacity bar above disk graphs, a named internal SSD with its startup volume, and a separately labelled virtual disk image. The empty card-reader driver is omitted. Switching between devices updates both visual and accessibility details; the capacity layout was checked in Windows and macOS appearances with dark styling. Physical capacity and shared APFS filesystem capacity are displayed separately and never summed. Capacity refreshes every 30 seconds, while transfer rates remain live.
 
 The release download remains v1.0.0. These changes are on the development branch. Raw registry dumps, process lists, local screenshots and diagnostics are excluded from public source. No overall CPU or RAM reduction is claimed from this follow-up.
+
+
+## Logical core labels and time axis — 2026-10-12
+
+All 59 tests in 11 suites passed, followed by optimized build, signature, plist and collector checks. Core-type mapping is keyed by IORegistry logical-cpu-id, independent of enumeration order; malformed, unknown, out-of-range or duplicate IDs stay unknown. The map is read once with static hardware metadata. No dependency was added. The registry mapping approach was checked against [hwloc's Darwin topology implementation](https://github.com/open-mpi/hwloc/blob/master/hwloc/topology-darwin.c).
+
+The native dark Windows appearance was visually and accessibly verified: each CPU chart has a P/E badge, the legend spells out Performance/Efficiency, and the redundant utilization heading is removed for logical charts. Bare time endpoints are replaced by a duration ago and Latest sample; the latter remains accurate during pauses. The plot scaling and bounded sample retention are unchanged. On the development Mac, OS logical IDs 0–5 were efficiency cores and 6–9 were performance cores.
