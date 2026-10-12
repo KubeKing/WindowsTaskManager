@@ -48,3 +48,10 @@ The release download remains v1.0.0. These changes are on the development branch
 All 59 tests in 11 suites passed, followed by optimized build, signature, plist and collector checks. Core-type mapping is keyed by IORegistry logical-cpu-id, independent of enumeration order; malformed, unknown, out-of-range or duplicate IDs stay unknown. The map is read once with static hardware metadata. No dependency was added. The registry mapping approach was checked against [hwloc's Darwin topology implementation](https://github.com/open-mpi/hwloc/blob/master/hwloc/topology-darwin.c).
 
 The native dark Windows appearance was visually and accessibly verified: each CPU chart has a P/E badge, the legend spells out Performance/Efficiency, and the redundant utilization heading is removed for logical charts. Bare time endpoints are replaced by a duration ago and Latest sample; the latter remains accurate during pauses. The plot scaling and bounded sample retention are unchanged. On the development Mac, OS logical IDs 0–5 were efficiency cores and 6–9 were performance cores.
+
+
+## Performance context menus — 2026-10-12
+
+The CPU chart right-click menu reproduced the refresh issue: its submenu disappeared during ongoing sampling. CPU chart and resource-row menus now use a transparent native AppKit view, snapshot their items only on opening, and leave the tracked menu untouched when SwiftUI updates. Normal clicks and scrolling pass through the native overlay.
+
+The updated build passed all 59 tests in 11 suites, optimized build, signature, plist and real collector checks. Native UI verification held the chart menu and its graph submenu open across repeated live updates, then successfully selected Logical processors. Right-clicking an individual logical CPU and toggling kernel times added the dashed kernel overlays; the prior setting was restored afterward. The resource-row menu also remained present while readings changed, and normal Memory/CPU row selection continued to work. The actual native interaction is the regression check; no synthetic unit test claims to reproduce AppKit menu tracking. No external dependency was added.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep CPU chart and Performance resource right-click menus stable across live monitoring updates.
+
 - Label logical CPU charts with verified performance/efficiency core types and clarify graph time endpoints.
 
 - Measure experimental native P/E CPU frequencies with validated IOReport residency and frequency tables; no administrator helper.

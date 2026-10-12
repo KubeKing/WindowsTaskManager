@@ -107,12 +107,14 @@ struct PerformanceView: View {
                 .background(selection == id ? Color.primary.opacity(0.075) : .clear, in: RoundedRectangle(cornerRadius: store.appearance == .macOS ? 8 : 0))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
-        .contextMenu {
-            Button("Hide \(title)") {
-                if let item = store.performanceItems.first(where: { $0.id == id }) { store.setPerformanceItem(item, shown: false) }
-            }
-            Button("Show all performance items") { store.showAllPerformanceItems() }
-        }
+        .overlay(StableContextMenu {
+            [
+                .action("Hide \(title)") {
+                    if let item = store.performanceItems.first(where: { $0.id == id }) { store.setPerformanceItem(item, shown: false) }
+                },
+                .action("Show all performance items") { store.showAllPerformanceItems() }
+            ]
+        })
     }
     @ViewBuilder private func cpuContent(height: CGFloat, width: CGFloat) -> some View {
         VStack(spacing: 5) {
@@ -136,13 +138,15 @@ struct PerformanceView: View {
                 ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue).frame(height: height)
             }
             timeAxis
-        }.contextMenu {
-            Menu("Change graph to") {
-                Button { store.cpuGraphLogical = false } label: { Label("Overall utilization", systemImage: store.cpuGraphLogical ? "circle" : "checkmark") }
-                Button { store.cpuGraphLogical = true } label: { Label("Logical processors", systemImage: store.cpuGraphLogical ? "checkmark" : "circle") }
-            }
-            Toggle("Show kernel times", isOn: $store.showKernelTimes)
-        }
+        }.overlay(StableContextMenu {
+            [
+                .submenu("Change graph to", [
+                    .action("Overall utilization", checked: !store.cpuGraphLogical) { store.cpuGraphLogical = false },
+                    .action("Logical processors", checked: store.cpuGraphLogical) { store.cpuGraphLogical = true }
+                ]),
+                .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() }
+            ]
+        })
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
         layout {
             VStack(alignment: .leading, spacing: 15) {
