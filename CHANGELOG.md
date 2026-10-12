@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Keep the More menu, submenus and Settings dropdowns stable during live updates.
+- Hide individual Performance items with preferences retained across app updates.
+- Improve logical processor chart borders, contrast and per-core labels.
+- Reuse formatting work, remove redundant sorting and defer startup/service inventory scans until needed.
+- Document missing metrics by implementation feasibility and add physical footprint to the runtime measurement script.
+
 ## 1.0.0 — 2026-10-12
 
 Initial public release of Task Manager for Mac.

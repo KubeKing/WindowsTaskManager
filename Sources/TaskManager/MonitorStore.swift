@@ -46,11 +46,12 @@ private final class SamplingContext: @unchecked Sendable {
 final class MonitorStore: ObservableObject {
     @Published var snapshot = SystemSnapshot()
     @Published var history: [HistoryPoint] = []
-    @Published var page: ManagerPage = .processes
+    @Published var page: ManagerPage = .processes { didSet { loadInventoryIfNeeded() } }
     @Published var defaultStartPage: ManagerPage { didSet { defaults.set(defaultStartPage.rawValue, forKey: "defaultStartPage") } }
     @Published var performanceSelection = "cpu"
     @Published var cpuGraphLogical = false
     @Published var showKernelTimes = false
+    @Published private(set) var performanceVisibility: PerformanceVisibility
     @Published var appearance: AppAppearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
     @Published var query = "" { didSet {
         if let selection, !ProcessQuery.filter(snapshot.processes, query: query).contains(where: { $0.id == selection }) { self.selection = nil }
@@ -80,6 +81,7 @@ final class MonitorStore: ObservableObject {
     private var timer: DispatchSourceTimer?
     private var windowVisible = true
     private var inventoryBusy = false
+    private var lastInventoryRefresh = Date.distantPast
     private var localHistory: LocalHistory
     private var lastHistorySave = Date.distantPast
     private var latestSnapshot: SystemSnapshot?
@@ -89,6 +91,7 @@ final class MonitorStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        performanceVisibility = PerformanceVisibility(defaults: defaults)
         let initialPage = ManagerPage(rawValue: defaults.string(forKey: "defaultStartPage") ?? "") ?? .processes
         defaultStartPage = initialPage
         page = initialPage
@@ -110,13 +113,8 @@ final class MonitorStore: ObservableObject {
         guard let record = selectedProcess else { return false }
         return record.id.pid > 1 && record.id.pid != ProcessInfo.processInfo.processIdentifier && !["launchd", "kernel_task", "WindowServer", "loginwindow", "watchdogd"].contains(record.name)
     }
-    var visibleProcesses: [ProcessRecord] {
-        let filtered = ProcessQuery.filter(snapshot.processes, query: query)
-        return filtered.sorted {
-            let lhs = $0.cpuPercent ?? -1, rhs = $1.cpuPercent ?? -1
-            return lhs == rhs ? $0.name.localizedStandardCompare($1.name) == .orderedAscending : lhs > rhs
-        }
-    }
+    // The table owns sorting; sorting again here doubled work on every tick.
+    var visibleProcesses: [ProcessRecord] { ProcessQuery.filter(snapshot.processes, query: query) }
     var appCount: Int { Set(snapshot.processes.compactMap(\.applicationPath)).count }
     var totalNetworkRate: Double? {
         let rates = snapshot.networks.flatMap { [$0.receiveBytesPerSecond, $0.sendBytesPerSecond].compactMap { $0 } }
@@ -129,7 +127,25 @@ final class MonitorStore: ObservableObject {
     var actualInterval: Double { windowVisible ? interval : max(5, interval) }
     var historyObservationStart: Date? { localHistory.observationStart }
 
-    func start() { maintainHistory(); schedule(); refreshInventory() }
+    func start() { maintainHistory(); schedule(); loadInventoryIfNeeded() }
+    private func loadInventoryIfNeeded() {
+        if [.startup, .services, .users].contains(page), Date().timeIntervalSince(lastInventoryRefresh) > 30 { refreshInventory() }
+    }
+    var performanceItems: [PerformanceItem] { PerformanceCatalog.items(in: snapshot) }
+    var visiblePerformanceItems: [PerformanceItem] { performanceVisibility.visibleItems(in: performanceItems) }
+    func setPerformanceItem(_ item: PerformanceItem, shown: Bool) {
+        performanceVisibility.setShown(shown, preferenceID: item.preferenceID)
+        reconcilePerformanceSelection()
+    }
+    func showAllPerformanceItems() {
+        performanceVisibility.showAll()
+        reconcilePerformanceSelection()
+    }
+    private func reconcilePerformanceSelection() {
+        if let selected = performanceVisibility.selection(performanceSelection, in: performanceItems), selected != performanceSelection {
+            performanceSelection = selected
+        }
+    }
     func stop() {
         timer?.cancel(); timer = nil
         if historyEnabled { try? localHistory.save() }
@@ -163,7 +179,7 @@ final class MonitorStore: ObservableObject {
         isCollecting = true
         let context = samplingContext
         worker.async { [weak self] in
-            let value = context.sampler.sample()
+            let value = autoreleasepool { context.sampler.sample() }
             DispatchQueue.main.async { self?.accept(value) }
         }
     }
@@ -203,6 +219,7 @@ final class MonitorStore: ObservableObject {
     private func publish(_ value: SystemSnapshot) {
         snapshot = value
         history = graphBuffer
+        reconcilePerformanceSelection()
         if historyEnabled { historyRecords = localHistory.records }
         if let selection, !value.processes.contains(where: { $0.id == selection }) { self.selection = nil }
     }
@@ -212,7 +229,9 @@ final class MonitorStore: ObservableObject {
         inventoryBusy = true
         worker.async { [weak self] in
             let value = SystemInventory().scan()
-            DispatchQueue.main.async { self?.inventory = value; self?.inventoryBusy = false }
+            DispatchQueue.main.async {
+                self?.inventory = value; self?.inventoryBusy = false; self?.lastInventoryRefresh = Date()
+            }
         }
     }
 

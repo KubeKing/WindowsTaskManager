@@ -17,27 +17,33 @@ struct PerformanceView: View {
     private var tint: Color { selection == "memory" ? .purple : disk != nil ? .green : network != nil ? .orange : isGPU ? .purple : .blue }
 
     var body: some View {
+        let visibleIDs = Set(store.visiblePerformanceItems.map(\.id))
         HStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 2) {
-                    resourceRow("cpu", title: "CPU", value: MetricFormat.percent(store.snapshot.cpuUsage), color: .blue, values: store.history.map(\.cpu))
-                    resourceRow("memory", title: "Memory", value: memorySummary, color: .purple, values: store.history.map(\.memory))
+                    if visibleIDs.contains("cpu") { resourceRow("cpu", title: "CPU", value: MetricFormat.percent(store.snapshot.cpuUsage), color: .blue, values: store.history.map(\.cpu)) }
+                    if visibleIDs.contains("memory") { resourceRow("memory", title: "Memory", value: memorySummary, color: .purple, values: store.history.map(\.memory)) }
                     ForEach(Array(disks.enumerated()), id: \.element.id) { index, item in
-                        resourceRow("disk:" + item.id, title: item.totalBytes > 0 ? item.name : "Disk \(index)", value: item.totalBytes > 0 ? "\(MetricFormat.bytes(item.freeBytes)) free" : MetricFormat.rate(sum(item.readBytesPerSecond, item.writeBytesPerSecond)), color: .green, values: diskValues(item.id, write: false), scale: diskScale(item.id))
+                        if visibleIDs.contains("disk:" + item.id) { resourceRow("disk:" + item.id, title: item.totalBytes > 0 ? item.name : "Disk \(index)", value: item.totalBytes > 0 ? "\(MetricFormat.bytes(item.freeBytes)) free" : MetricFormat.rate(sum(item.readBytesPerSecond, item.writeBytesPerSecond)), color: .green, values: diskValues(item.id, write: false), scale: diskScale(item.id)) }
                     }
                     ForEach(store.snapshot.networks) { item in
-                        resourceRow("network:" + item.id, title: item.name, value: "S: \(bits(item.sendBytesPerSecond)) R: \(bits(item.receiveBytesPerSecond))", color: .orange, values: networkValues(item.id, send: false), scale: networkScale(item.id))
+                        if visibleIDs.contains("network:" + item.id) { resourceRow("network:" + item.id, title: item.name, value: "S: \(bits(item.sendBytesPerSecond)) R: \(bits(item.receiveBytesPerSecond))", color: .orange, values: networkValues(item.id, send: false), scale: networkScale(item.id)) }
                     }
-                    if store.snapshot.gpus.isEmpty {
+                    if store.snapshot.gpus.isEmpty && visibleIDs.contains("gpu") {
                         resourceRow("gpu", title: "GPU 0", value: hardware.gpuName + " · —", color: .purple, values: [])
                     } else {
                         ForEach(Array(store.snapshot.gpus.enumerated()), id: \.element.id) { index, item in
-                            resourceRow("gpu:" + item.id, title: "GPU \(index)", value: item.name + " · " + MetricFormat.percent(item.utilization), color: .purple, values: gpuValues(item.id, \.utilization))
+                            if visibleIDs.contains("gpu:" + item.id) { resourceRow("gpu:" + item.id, title: "GPU \(index)", value: item.name + " · " + MetricFormat.percent(item.utilization), color: .purple, values: gpuValues(item.id, \.utilization)) }
                         }
                     }
                 }.padding(.horizontal, 8).padding(.top, 10)
             }.frame(width: 206).background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
             Divider()
+            if visibleIDs.isEmpty {
+                ContentUnavailableView { Label("All performance items are hidden", systemImage: "eye.slash") } description: {
+                    Text("Show items from the More menu or Settings.")
+                } actions: { Button("Show all performance items") { store.showAllPerformanceItems() } }
+            } else {
             GeometryReader { geometry in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 13) {
@@ -61,6 +67,7 @@ struct PerformanceView: View {
                         else { cpuContent(height: graphHeight(geometry.size.height), width: geometry.size.width - 52) }
                     }.padding(.horizontal, 26).padding(.top, 20).padding(.bottom, 22)
                 }
+            }
             }
         }.onChange(of: selection) { isGPUMemoryExpanded = false }
     }
@@ -95,6 +102,12 @@ struct PerformanceView: View {
                 .background(selection == id ? Color.primary.opacity(0.075) : .clear, in: RoundedRectangle(cornerRadius: store.appearance == .macOS ? 8 : 0))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
+        .contextMenu {
+            Button("Hide \(title)") {
+                if let item = store.performanceItems.first(where: { $0.id == id }) { store.setPerformanceItem(item, shown: false) }
+            }
+            Button("Show all performance items") { store.showAllPerformanceItems() }
+        }
     }
     @ViewBuilder private func cpuContent(height: CGFloat, width: CGFloat) -> some View {
         VStack(spacing: 5) {
@@ -102,11 +115,14 @@ struct PerformanceView: View {
             if store.cpuGraphLogical {
                 let count = max(1, hardware.logicalCPUs)
                 let columns = count > 16 ? 6 : count > 8 ? 5 : count > 4 ? 4 : 2
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: columns), spacing: 5) {
+                let rows = (count + columns - 1) / columns
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                     ForEach(0..<count, id: \.self) { index in
-                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue)
-                            .frame(height: (height - CGFloat((count + columns - 1) / columns - 1) * 5) / CGFloat((count + columns - 1) / columns))
-                            .help("Logical processor \(index + 1)")
+                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1)", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil)
+                        .frame(height: (height - CGFloat(rows - 1) * 8) / CGFloat(rows))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Logical processor \(index + 1)")
+                        .help("Logical processor \(index + 1) · 0–100% utilization")
                     }
                 }
             } else {
@@ -123,7 +139,7 @@ struct PerformanceView: View {
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
         layout {
             VStack(alignment: .leading, spacing: 15) {
-                HStack(spacing: 34) { metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage)); metric("Speed", "—", help: "Live processor frequency is not available through public macOS counters.") }
+                HStack(spacing: 34) { metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage)); metric("Speed", "—", help: "Not collected in this build. Apple's powermetrics frequency sampling requires administrator authorization.") }
                 HStack(spacing: 22) {
                     metric("Processes", String(store.snapshot.processes.count), size: 18)
                     metric("Threads", String(store.snapshot.processes.compactMap(\.threadCount).reduce(0, +)), size: 18)
@@ -167,7 +183,7 @@ struct PerformanceView: View {
     }
     @ViewBuilder private func diskContent(_ d: DiskMetrics, height: CGFloat) -> some View {
         graph("Active time", maximumLabel: "100%", values: [], height: height * 0.8)
-            .help("Device active time is not exposed by supported public macOS counters.")
+            .help("Not collected in this build. Device busy-time counters need driver-specific validation.")
         graph("Disk transfer rate", maximumLabel: MetricFormat.rate(diskScale(d.id)), values: diskValues(d.id, write: false), second: diskValues(d.id, write: true), maximum: diskScale(d.id), height: height * 0.2)
         HStack(alignment: .top, spacing: 35) {
             VStack(alignment: .leading, spacing: 17) {
@@ -182,7 +198,7 @@ struct PerformanceView: View {
                 pair("Type:", d.totalBytes > 0 ? "Mounted volume" : "Physical device")
             }
         }
-        note("Solid line: read. Dashed line: write. Active time and response time are unavailable on macOS.")
+        note("Solid line: read. Dashed line: write. Active time and response time are not collected in this build.")
     }
     @ViewBuilder private func networkContent(_ n: NetworkMetrics, height: CGFloat) -> some View {
         graph("Throughput", maximumLabel: bits(networkScale(n.id)), values: networkValues(n.id, send: false), second: networkValues(n.id, send: true), maximum: networkScale(n.id), height: height)
@@ -278,21 +294,35 @@ struct ResourcePlot: View {
     var maximum: Double = 100
     var color: Color = .blue
     var compact = false
+    var logical = false
+    var logicalTitle: String? = nil
+    var currentUsage: Double? = nil
     var overlays: [ResourcePlotOverlay] = []
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        Canvas { context, size in
-            let rect = CGRect(origin: .zero, size: size)
+        Canvas { context, canvasSize in
+            var size = canvasSize
+            if let logicalTitle {
+                let title = Text(logicalTitle).font(.system(size: 10)).foregroundColor(.secondary)
+                let usage = Text(MetricFormat.percent(currentUsage)).font(.system(size: 10)).monospacedDigit().foregroundColor(.secondary)
+                context.draw(title, at: .zero, anchor: .topLeading)
+                context.draw(usage, at: CGPoint(x: size.width, y: 0), anchor: .topTrailing)
+                context.translateBy(x: 0, y: 16)
+                size.height = max(1, size.height - 16)
+            }
+            // Stroke entirely inside the canvas: an edge-centered stroke is clipped.
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5)
             context.fill(Path(rect), with: .color(color.opacity(0.035)))
             var grid = Path()
-            for i in 0...10 { let x = size.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: 0)); grid.addLine(to: CGPoint(x: x, y: size.height)) }
-            for i in 0...5 { let y = size.height * Double(i) / 5; grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y)) }
-            context.stroke(grid, with: .color(color.opacity(compact ? 0.09 : 0.13)), lineWidth: 0.5)
+            for i in 1..<10 { let x = rect.minX + rect.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: rect.minY)); grid.addLine(to: CGPoint(x: x, y: rect.maxY)) }
+            for i in 1..<5 { let y = rect.minY + rect.height * Double(i) / 5; grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y)) }
+            context.stroke(grid, with: .color(color.opacity(compact ? 0.12 : scheme == .dark ? 0.24 : 0.18)), lineWidth: 0.5)
             draw(values, size: size, context: &context, dashed: false)
             if !secondValues.isEmpty { draw(secondValues, size: size, context: &context, dashed: true) }
             for overlay in overlays {
                 draw(overlay.values, size: size, context: &context, dashed: true, lineColor: overlay.color, lineDash: overlay.dash)
             }
-            context.stroke(Path(rect), with: .color(color.opacity(0.3)), lineWidth: 1)
+            context.stroke(Path(rect), with: .color(color.opacity(scheme == .dark ? 0.7 : 0.5)), lineWidth: 1)
         }
     }
     private func draw(_ values: [Double?], size: CGSize, context: inout GraphicsContext, dashed: Bool, lineColor: Color? = nil, lineDash: [CGFloat]? = nil) {
@@ -322,7 +352,7 @@ struct ResourcePlot: View {
                 var fill = line; fill.addLine(to: CGPoint(x: last.x, y: size.height)); fill.addLine(to: CGPoint(x: first.x, y: size.height)); fill.closeSubpath()
                 context.fill(fill, with: .linearGradient(Gradient(colors: [color.opacity(0.22), color.opacity(0.025)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
             }
-            context.stroke(line, with: .color((lineColor ?? color).opacity(lineColor != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
+            context.stroke(line, with: .color((lineColor ?? color).opacity(lineColor != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : logical ? 1.2 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
         }
     }
 }

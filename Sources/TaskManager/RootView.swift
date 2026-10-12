@@ -152,43 +152,10 @@ struct RootView: View {
     }
     private var commandDivider: some View { Rectangle().fill(Color(nsColor: .separatorColor).opacity(0.35)).frame(width: 0.5, height: 24) }
     private var viewMenu: some View {
-        Menu {
-            Button("Refresh now") { store.refresh(); if [.startup, .services, .users].contains(store.page) { store.refreshInventory() } }
-            Button(store.isPaused ? "Resume monitoring" : "Pause monitoring") { store.togglePause() }
-            Menu("Real-time update speed") {
-                ForEach([0.5, 1.0, 2.0, 5.0], id: \.self) { value in Button("\(value.formatted()) seconds\(value == store.interval ? " ✓" : "")") { store.setInterval(value) } }
-            }
-            if store.page == .processes || store.page == .details {
-                Divider()
-                Button("Inspect process") { store.inspectSelected() }.disabled(store.selectedProcess == nil)
-                Button("Reveal executable") { store.revealSelected() }.disabled(store.selectedProcess?.executablePath == nil)
-                Button("Copy details") { store.copySelected() }.disabled(store.selectedProcess == nil)
-                Menu("CPU priority") {
-                    Button("Normal (0)") { store.changePriority(0) }
-                    Button("Low (10)") { store.changePriority(10) }
-                    Button("Lowest (19)") { store.changePriority(19) }
-                    Button("High (−10)") { store.changePriority(-10) }
-                }.disabled(!store.canTerminateSelected)
-                Button("Force quit…") { store.quitSelected(force: true) }.disabled(!store.canTerminateSelected)
-            }
-            if store.page == .performance {
-                Divider()
-                Menu("CPU graph") {
-                    Button("Overall utilization\(!store.cpuGraphLogical ? " ✓" : "")") { store.cpuGraphLogical = false }
-                    Button("Logical processors\(store.cpuGraphLogical ? " ✓" : "")") { store.cpuGraphLogical = true }
-                }
-                Toggle("Show kernel times", isOn: $store.showKernelTimes)
-            }
-            if !store.snapshot.warnings.isEmpty {
-                Divider()
-                Button("Collection notes…") { store.errorMessage = store.snapshot.warnings.joined(separator: "\n\n") }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                if store.isPaused { Image(systemName: "pause.circle").foregroundStyle(.orange) }
-                Image(systemName: "ellipsis").font(.system(size: 14))
-            }
-        }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("View and monitoring options")
+        HStack(spacing: 4) {
+            if store.isPaused { Image(systemName: "pause.circle").foregroundStyle(.orange) }
+            MoreMenu(store: store).frame(width: 26, height: 24)
+        }
     }
     @ViewBuilder private var content: some View {
         switch store.page {

@@ -23,6 +23,7 @@ The build produces `build/Task Manager.app`, signed locally with an ad-hoc signa
 
 - **Processes / Details:** search names, users, paths or PIDs; click headers to sort; select a process to inspect, copy details, reveal its executable, quit or force quit. Process actions validate its creation time as well as PID.
 - **Performance:** separate CPU, Memory, disk, network-adapter and GPU layouts based on Windows reference frames; switch CPU between overall and logical-processor graphs, and toggle kernel times. Unsupported counters remain dashes. The initial sample establishes rate baselines. Per-process CPU uses a whole-machine 0–100% convention, unlike Activity Monitor's per-core convention.
+- **Performance visibility:** right-click a resource to hide it, or use **More → Performance items** / **Settings → Performance items** to show or hide individual CPUs, memory, disks, adapters and GPUs. Choices are stored in the app's version-independent preferences and survive app updates. **Show all performance items** restores the list.
 - **GPU memory comparison:** in Performance → GPU, click **Enlarge** beside GPU memory in use (or double-click the graph). Turn on **Overlay total, GPU and CPU memory** for capacity, system usage, GPU usage and an explicitly labelled CPU/other estimate. **Restore** returns to the GPU overview. CPU/other is system used minus this GPU's in-use counter; shared allocations prevent an exact CPU-only split.
 - **Startup apps / Services:** read-only inventory of accessible launch agents, daemons and loaded user jobs. Open Login Items in System Settings to manage other apps' startup behavior. Configured jobs are not assumed to be running.
 - **Users:** login sessions reported by the local session database, expandable process rows and attributable resource totals.
@@ -44,3 +45,5 @@ Tests exercise GPU driver decoding and history, counter resets, rate baselines, 
 Preferences use the `local.swift.TaskManager` defaults domain. Optional history lives in `~/Library/Application Support/TaskManager`. No launch-at-login item or permanent background process is installed.
 
 Visual references for every page and performance subpage are cataloged in [docs/windows-reference.md](docs/windows-reference.md). Runtime measurements and acceptance checks are recorded in [docs/verification.md](docs/verification.md).
+
+Unavailable metrics and controls are classified in [the metric inventory](docs/metric-inventory.md), including features that can be added versus Windows concepts with no exact Mac equivalent.

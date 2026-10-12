@@ -373,36 +373,21 @@ struct SettingsPage: View {
             VStack(alignment: .leading, spacing: 22) {
                 settingsSection("Appearance") {
                     settingRow("App theme", detail: "Select which app theme to display", symbol: "paintpalette") {
-                        Picker("App theme", selection: $store.colorSchemeChoice) {
-                            Text("Use system setting").tag("system")
-                            Text("Light").tag("light")
-                            Text("Dark").tag("dark")
-                        }.labelsHidden().frame(width: 175)
+                        StablePicker(title: "App theme", selection: $store.colorSchemeChoice, choices: [("Use system setting", "system"), ("Light", "light"), ("Dark", "dark")]).frame(width: 175)
                     }
                     settingRow("Interface style", detail: "Task Manager layout with your preferred system styling", symbol: "macwindow") {
-                        Picker("Interface style", selection: $store.appearance) {
-                            Text("macOS · Liquid Glass").tag(AppAppearance.macOS)
-                            Text("Windows · Task Manager").tag(AppAppearance.windows)
-                        }.labelsHidden().frame(width: 175)
+                        StablePicker(title: "Interface style", selection: $store.appearance, choices: [("macOS · Liquid Glass", AppAppearance.macOS), ("Windows · Task Manager", AppAppearance.windows)]).frame(width: 175)
                     }
                 }
                 settingsSection("General") {
                     settingRow("Default start page", detail: "Specify which page is visible when launching Task Manager", symbol: "rectangle.split.2x2") {
-                        Picker("Default start page", selection: $store.defaultStartPage) {
-                            ForEach(ManagerPage.allCases.filter { $0 != .settings }) { Text($0.title).tag($0) }
-                        }.labelsHidden().frame(width: 175)
+                        StablePicker(title: "Default start page", selection: $store.defaultStartPage, choices: ManagerPage.allCases.filter { $0 != .settings }.map { ($0.title, $0) }).frame(width: 175)
                     }
                     settingRow("Real time update speed", detail: "Choose how often to update the system resource usage report", symbol: "speedometer") {
-                        Picker("Real time update speed", selection: Binding(get: { store.isPaused ? 0.0 : store.interval }, set: { value in
+                        StablePicker(title: "Real time update speed", selection: Binding(get: { store.isPaused ? 0.0 : store.interval }, set: { value in
                             if value == 0 { if !store.isPaused { store.togglePause() } }
                             else { store.setInterval(value); if store.isPaused { store.togglePause() } }
-                        })) {
-                            Text("High · 0.5 seconds").tag(0.5)
-                            Text("Normal · 1 second").tag(1.0)
-                            Text("Low · 2 seconds").tag(2.0)
-                            Text("Very low · 5 seconds").tag(5.0)
-                            Text("Paused").tag(0.0)
-                        }.labelsHidden().frame(width: 175)
+                        }), choices: [("High · 0.5 seconds", 0.5), ("Normal · 1 second", 1.0), ("Low · 2 seconds", 2.0), ("Very low · 5 seconds", 5.0), ("Paused", 0.0)]).frame(width: 175)
                     }
                     VStack(spacing: 0) {
                         disclosureHeader("Window management", detail: "Specify default Task Manager window behavior", symbol: "macwindow.on.rectangle", expanded: $windowOptionsExpanded)
@@ -426,6 +411,16 @@ struct SettingsPage: View {
                             }.toggleStyle(.checkbox).font(.system(size: 12)).padding(.leading, 48).padding(.vertical, 16).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }.background(cardBackground)
+                }
+                settingsSection("Performance items") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Choose which resources appear in Performance. Choices survive app updates and remain saved for disconnected devices.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        ForEach(store.performanceItems) { item in
+                            Toggle(item.title, isOn: Binding(get: { store.performanceVisibility.isShown(item) }, set: { store.setPerformanceItem(item, shown: $0) }))
+                        }
+                        Button("Show all performance items") { store.showAllPerformanceItems() }
+                    }.toggleStyle(.checkbox).font(.system(size: 12)).padding(16).frame(maxWidth: .infinity, alignment: .leading).background(cardBackground)
                 }
                 settingsSection("Local history") {
                     settingRow("Observed resource usage", detail: "Retain up to 30 days on this Mac", symbol: "clock.arrow.circlepath") {

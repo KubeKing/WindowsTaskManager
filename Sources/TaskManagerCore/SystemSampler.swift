@@ -351,6 +351,7 @@ public final class SystemSampler {
                 let pair = Pair(read: read.uint64Value, write: write.uint64Value)
                 counters[id] = pair
                 var metric = DiskMetrics(id: id, name: "Physical disk \(devices.count + 1)", mountPath: "Device I/O · all volumes")
+                metric.preferenceID = RegistryIdentity.path(of: service)
                 metric.readBytesPerSecond = RateMath.rate(current: pair.read, previous: previousDiskDevices[id]?.read, elapsed: elapsed)
                 metric.writeBytesPerSecond = RateMath.rate(current: pair.write, previous: previousDiskDevices[id]?.write, elapsed: elapsed)
                 devices.append(metric)

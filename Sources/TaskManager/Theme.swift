@@ -19,15 +19,25 @@ struct GlassBackground: NSViewRepresentable {
 }
 
 enum MetricFormat {
+    private static let formatterLock = NSLock()
+    private static let memoryFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter(); formatter.countStyle = .memory; return formatter
+    }()
+    private static let rateFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter(); formatter.countStyle = .decimal; return formatter
+    }()
+
     static func bytes(_ value: UInt64?) -> String {
         guard let value else { return "—" }
         if value == 0 { return "0 KB" }
-        return ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .memory)
+        formatterLock.lock(); defer { formatterLock.unlock() }
+        return memoryFormatter.string(fromByteCount: Int64(clamping: value))
     }
     static func rate(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "—" }
         if value == 0 { return "0 KB/s" }
-        return ByteCountFormatter.string(fromByteCount: Int64(max(0, value)), countStyle: .decimal) + "/s"
+        formatterLock.lock(); defer { formatterLock.unlock() }
+        return rateFormatter.string(fromByteCount: Int64(max(0, value))) + "/s"
     }
     static func percent(_ value: Double?) -> String { value.map { String(format: "%.1f%%", $0) } ?? "—" }
     static func uptime(_ interval: Double) -> String {

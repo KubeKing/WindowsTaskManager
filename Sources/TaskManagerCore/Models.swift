@@ -59,6 +59,7 @@ public struct NetworkMetrics: Identifiable, Sendable {
 
 public struct DiskMetrics: Identifiable, Sendable {
     public var id: String
+    public var preferenceID: String? = nil
     public var name: String
     public var mountPath: String
     public var totalBytes: UInt64 = 0
@@ -70,6 +71,7 @@ public struct DiskMetrics: Identifiable, Sendable {
 
 public struct GPUMetrics: Identifiable, Sendable {
     public var id: String
+    public var preferenceID: String? = nil
     public var name: String
     public var utilization: Double? = nil
     public var rendererUtilization: Double? = nil
