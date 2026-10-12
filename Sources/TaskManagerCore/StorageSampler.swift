@@ -37,7 +37,7 @@ enum StorageTopology {
 /// Metadata/filesystem capacity is refreshed every 30 seconds; only driver
 /// byte counters are read each tick. No subprocess or privileged helper.
 final class StorageSampler {
-    private struct Counters { var read: UInt64; var write: UInt64 }
+    private struct Counters { var read: UInt64; var write: UInt64; var timing: DiskTiming? }
     private var previous: [String: Counters] = [:]
     private var metadata: [String: DiskMetrics] = [:]
     private var topology: [String: StorageDevice] = [:]
@@ -71,7 +71,7 @@ final class StorageSampler {
             guard let stats = Self.property(service, "Statistics") as? [String: Any],
                   let read = stats["Bytes (Read)"] as? NSNumber,
                   let write = stats["Bytes (Write)"] as? NSNumber else { continue }
-            current[id] = Counters(read: read.uint64Value, write: write.uint64Value)
+            current[id] = Counters(read: read.uint64Value, write: write.uint64Value, timing: DiskTiming.decode(stats))
         }
         topologyChanged = topologyChanged || liveIDs != knownIDs
         knownIDs = liveIDs
@@ -84,6 +84,7 @@ final class StorageSampler {
         let result = metadata.values.map { stored in
             var metric = stored
             if let value = current[metric.id] {
+                metric.averageResponseMilliseconds = DiskTiming.responseMilliseconds(current: value.timing, previous: previous[metric.id]?.timing)
                 metric.readBytesPerSecond = RateMath.rate(current: value.read, previous: previous[metric.id]?.read, elapsed: elapsed)
                 metric.writeBytesPerSecond = RateMath.rate(current: value.write, previous: previous[metric.id]?.write, elapsed: elapsed)
             }

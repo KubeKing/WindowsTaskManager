@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Choose each GPU chart metric independently through stable native dropdowns, with choices retained across updates and unavailable engine metrics labelled explicitly.
+- Populate disk average I/O response time from validated request counters and explain why active time differs from capacity used.
+
 - Add experimental native TCP/UDP receive/send rates per process and app group, with PID-reuse protection and unavailable fallbacks; no helper or third-party package.
 - Remove unsupported Windows Power usage/trend columns and fix duplicated resource totals when hiding the last table column.
 

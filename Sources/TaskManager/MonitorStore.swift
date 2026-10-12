@@ -52,6 +52,7 @@ final class MonitorStore: ObservableObject {
     @Published var cpuGraphLogical = false
     @Published var showKernelTimes = false
     @Published private(set) var performanceVisibility: PerformanceVisibility
+    @Published private(set) var gpuChartLayout: GPUChartLayout
     @Published var appearance: AppAppearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
     @Published var query = "" { didSet {
         if let selection, !ProcessQuery.filter(snapshot.processes, query: query).contains(where: { $0.id == selection }) { self.selection = nil }
@@ -92,6 +93,7 @@ final class MonitorStore: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         performanceVisibility = PerformanceVisibility(defaults: defaults)
+        gpuChartLayout = GPUChartLayout(defaults: defaults)
         let initialPage = ManagerPage(rawValue: defaults.string(forKey: "defaultStartPage") ?? "") ?? .processes
         defaultStartPage = initialPage
         page = initialPage
@@ -137,6 +139,7 @@ final class MonitorStore: ObservableObject {
         performanceVisibility.setShown(shown, preferenceID: item.preferenceID)
         reconcilePerformanceSelection()
     }
+    func setGPUChartMetric(_ metric: GPUChartMetric, at slot: Int) { gpuChartLayout.set(metric, at: slot) }
     func showAllPerformanceItems() {
         performanceVisibility.showAll()
         reconcilePerformanceSelection()

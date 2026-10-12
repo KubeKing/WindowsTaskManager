@@ -84,6 +84,7 @@ public struct DiskMetrics: Identifiable, Sendable {
     public var preferenceID: String? = nil
     public var name: String
     public var mountPath: String
+    public var averageResponseMilliseconds: Double? = nil
     public var kind: DiskKind
     public var bsdName: String? = nil
     public var model: String? = nil

@@ -70,3 +70,16 @@ The native reader uses one utility queue, asynchronous queries at the existing s
 A 30-second visible Processes-page spot check measured 2.47 CPU seconds (8.23% of one core), ending RSS 209.3 MiB and ending physical footprint 74.4 MiB. Other apps remained active and compression/shared pages affected memory accounting. There is no controlled before/after comparison for this addition; no CPU or RAM reduction is claimed. The final smoke sample collected in 9.34 ms.
 
 Public source and the built executable passed local-path and credential-pattern scans. Raw probes, process lists, screenshots, endpoint data and local runtime reports remain excluded from public source. The existing v1.0.0 release download is unchanged.
+
+
+## GPU chart selectors and disk timing — 2026-10-12
+
+All 72 tests in 14 suites passed, followed by optimized build, signature, plist and native collector checks. New tests cover independent persisted chart slots, unknown settings and index guards, metric units and missing readings, driver counter validation, resets, overlapping I/O and intervals without completed requests. A memory conversion regression was caught by the tests and corrected before the final successful run.
+
+All four GPU charts now have stable native selectors. UI checks covered selectable utilization, renderer, tiler and memory metrics, an explicitly unavailable Video Decode graph, byte-versus-percent scaling, independent chart changes, selection persistence after quit/relaunch and both dark appearances. A native menu remained tracked across live sampling and successfully applied a selection afterward. The fourth default chart uses live GPU memory in use.
+
+The development Mac exposes completed read/write operation counts and cumulative per-request elapsed nanoseconds. Their interval deltas now provide average completed-I/O response time; a live disk-page check showed 0.05 ms. Concurrent requests can overlap, so these durations are not converted into a fabricated active-time percentage. The graph explains that a validated busy-time counter is unavailable and distinguishes active time from filesystem capacity used. Timing uses the existing driver query, with no additional polling. The interpretation was checked against Apple's [IOBlockStorageDriver source](https://github.com/apple-oss-distributions/IOStorageFamily/blob/main/IOBlockStorageDriver.cpp).
+
+Targeted accelerator/media-driver inspection and IOReport descriptor research found utilization, renderer, tiler and GPU memory readings, plus media energy/bandwidth/power-state channels. No verified separate Video Decode, Video Encode or Copy busy percentage was established on this Mac. Those choices stay clearly unavailable; energy, bandwidth and power residency are not substituted for utilization. This is a hardware/OS verification limit, not a claim that media counters can never be implemented. Research probes are excluded, and no additional runtime IOReport subscription was added.
+
+No external dependency, privileged helper or remote request was added. Raw registry/channel probes, screenshots and local runtime reports remain excluded from public source. The existing v1.0.0 release download is unchanged.

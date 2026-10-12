@@ -214,12 +214,12 @@ struct PerformanceView: View {
                 Text("Available: \(MetricFormat.bytes(volume.freeBytes)) · \(volume.mountPath)").font(.system(size: 11)).foregroundStyle(.secondary)
             }.padding(.top, 5)
         }
-        graph("Active time", maximumLabel: "100%", values: [], height: height * 0.8)
-            .help("Not collected in this build. Device busy-time counters need driver-specific validation.")
+        graph("Active time", maximumLabel: "100%", values: [], height: height * 0.8, unavailableText: "Active time unavailable\nNo validated disk busy-time counter")
+            .help("Percentage of time this drive is busy handling I/O, not storage capacity used. Request timings may overlap and cannot establish this percentage.")
         graph("Disk transfer rate", maximumLabel: MetricFormat.rate(diskScale(d.id)), values: diskValues(d.id, write: false), second: diskValues(d.id, write: true), maximum: diskScale(d.id), height: height * 0.2)
         HStack(alignment: .top, spacing: 35) {
             VStack(alignment: .leading, spacing: 17) {
-                HStack(spacing: 28) { metric("Active time", "—"); metric("Average response time", "—") }
+                HStack(spacing: 28) { metric("Active time", "—"); metric("Average response time", d.averageResponseMilliseconds.map { String(format: "%.2f ms", $0) } ?? "—", help: "Mean duration of completed I/O requests from this device’s driver counters; unavailable when no I/O completes.") }
                 HStack(spacing: 28) { metric("Read speed", MetricFormat.rate(d.readBytesPerSecond), size: 20); metric("Write speed", MetricFormat.rate(d.writeBytesPerSecond), size: 20) }
             }
             Spacer(minLength: 0)
@@ -233,7 +233,7 @@ struct PerformanceView: View {
         }
         if d.volumes.isEmpty { note("No mounted user volume is associated with this device; used space is unavailable.") }
         note(d.kind == .volume ? "Mounted filesystem capacity. Device throughput could not be associated with this volume." : "Read/write rates cover this whole device. Capacity used is filesystem space unavailable to ordinary writes; APFS volumes can share container space and are not added together.")
-        note("Solid line: read. Dashed line: write. Active time and response time are not collected in this build.")
+        note("Solid line: read. Dashed line: write. Active time is the percentage of time the drive is busy, separate from capacity used. No validated busy-time reading is available on this Mac.")
     }
     @ViewBuilder private func networkContent(_ n: NetworkMetrics, height: CGFloat) -> some View {
         graph("Throughput", maximumLabel: bits(networkScale(n.id)), values: networkValues(n.id, send: false), second: networkValues(n.id, send: true), maximum: networkScale(n.id), height: height)
@@ -249,11 +249,9 @@ struct PerformanceView: View {
         let peakMemory = store.history.compactMap { $0.gpuByID[id] }.flatMap { [$0.memoryInUseBytes, $0.memoryAllocatedBytes].compactMap { $0 } }.max() ?? 0
         let memoryScale = max(1, store.snapshot.memory.totalBytes, peakMemory)
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            graph("GPU utilization", maximumLabel: "100%", values: gpuValues(id, \.utilization), height: height / 2 - 22)
-            graph("Renderer", maximumLabel: "100%", values: gpuValues(id, \.rendererUtilization), height: height / 2 - 22)
-            graph("Tiler", maximumLabel: "100%", values: gpuValues(id, \.tilerUtilization), height: height / 2 - 22)
-            graph("Video Decode", maximumLabel: "—", values: [], height: height / 2 - 22)
-                .help("The driver does not expose a separate Video Decode utilization counter.")
+            ForEach(0..<store.gpuChartLayout.metrics.count, id: \.self) { slot in
+                gpuChart(slot: slot, id: id, memoryScale: memoryScale, height: height / 2 - 22)
+            }
         }
         VStack(spacing: 5) {
             HStack {
@@ -281,7 +279,29 @@ struct PerformanceView: View {
         }
         note(gpu?.utilization == nil && gpu?.rendererUtilization == nil && gpu?.tilerUtilization == nil
              ? "GPU counters are unavailable from this Mac's driver."
-             : "Live driver-reported GPU, renderer and tiler activity. Apple silicon shares system memory; allocated memory can include reusable allocations. Separate Copy and Video engine counters are unavailable.")
+             : "Choose a metric above each chart; choices are saved. GPU, renderer, tiler and memory readings come from the driver. Video Decode, Video Encode and Copy percentages have no validated reading on this Mac. Allocated memory may include reusable allocations.")
+    }
+    private func gpuChart(slot: Int, id: String, memoryScale: UInt64, height: CGFloat) -> some View {
+        let metric = store.gpuChartLayout.metrics[slot]
+        let values = store.history.map { metric.value(in: $0.gpuByID[id]) }
+        return VStack(spacing: 5) {
+            HStack(spacing: 8) {
+                GPUChartMetricMenu(slot: slot, selected: metric, gpu: gpu) { store.setGPUChartMetric($0, at: slot) }
+                    .frame(minWidth: 0, maxWidth: .infinity).frame(height: 18)
+                Text(metric.isMemory ? MetricFormat.bytes(memoryScale) : "100%")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
+            }
+            ResourcePlot(values: values, dates: dates, maximum: metric.isMemory ? Double(memoryScale) : 100, color: tint)
+                .frame(height: height)
+                .overlay {
+                    if !values.contains(where: { $0 != nil }) {
+                        Text("Unavailable").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
+                .help(metric.value(in: gpu) == nil ? metric.unavailableReason : metric.title)
+                .accessibilityLabel("GPU chart \(slot + 1): \(metric.title)")
+            timeAxis
+        }
     }
     private func gpuValues(_ id: String, _ keyPath: KeyPath<GPUMetrics, Double?>) -> [Double?] {
         store.history.map { $0.gpuByID[id]?[keyPath: keyPath] }
@@ -292,8 +312,8 @@ struct PerformanceView: View {
             return value.map { Double($0) }
         }
     }
-    private func graph(_ label: String, maximumLabel: String, values: [Double?], second: [Double?] = [], maximum: Double = 100, height: CGFloat) -> some View {
-        VStack(spacing: 5) { axis(label, maximum: maximumLabel); ResourcePlot(values: values, dates: dates, secondValues: second, maximum: maximum, color: tint).frame(height: height).overlay { if !values.contains(where: { $0 != nil }) { Text("—").font(.system(size: 16)).foregroundStyle(.secondary) } }; timeAxis }
+    private func graph(_ label: String, maximumLabel: String, values: [Double?], second: [Double?] = [], maximum: Double = 100, height: CGFloat, unavailableText: String? = nil) -> some View {
+        VStack(spacing: 5) { axis(label, maximum: maximumLabel); ResourcePlot(values: values, dates: dates, secondValues: second, maximum: maximum, color: tint).frame(height: height).overlay { if !values.contains(where: { $0 != nil }) { Text(unavailableText ?? "—").font(.system(size: unavailableText == nil ? 16 : 12)).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(12) } }; timeAxis }
     }
     private func axis(_ label: String, maximum: String) -> some View { HStack { Text(label); Spacer(); Text(maximum) }.font(.system(size: 11)).foregroundStyle(.secondary) }
     private var timeAxis: some View {
