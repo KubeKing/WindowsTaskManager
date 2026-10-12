@@ -14,10 +14,9 @@ public enum PerformanceCatalog {
     public static func items(in snapshot: SystemSnapshot) -> [PerformanceItem] {
         var items = [PerformanceItem(id: "cpu", preferenceID: "cpu", title: "CPU"),
                      PerformanceItem(id: "memory", preferenceID: "memory", title: "Memory")]
-        let disks = snapshot.disks.sorted { ($0.totalBytes == 0 ? 0 : 1, $0.id) < ($1.totalBytes == 0 ? 0 : 1, $1.id) }
-        items += disks.enumerated().map { index, disk in
+        items += snapshot.disks.map { disk in
             PerformanceItem(id: "disk:" + disk.id, preferenceID: "disk:" + (disk.preferenceID ?? disk.id),
-                            title: disk.totalBytes > 0 ? disk.name : "Disk \(index)")
+                            title: disk.name + (disk.bsdName.map { " (" + $0 + ")" } ?? ""))
         }
         items += snapshot.networks.map { PerformanceItem(id: "network:" + $0.id, preferenceID: "network:" + $0.id, title: $0.name) }
         if snapshot.gpus.isEmpty { items.append(PerformanceItem(id: "gpu", preferenceID: "gpu:default", title: "GPU 0")) }

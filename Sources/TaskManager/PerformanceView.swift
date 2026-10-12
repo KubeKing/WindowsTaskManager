@@ -7,9 +7,7 @@ struct PerformanceView: View {
     private let hardware = HardwareInfo.read()
     private var selection: String { store.performanceSelection }
     private var dates: [Date] { store.history.map(\.timestamp) }
-    private var disks: [DiskMetrics] {
-        store.snapshot.disks.sorted { ($0.totalBytes == 0 ? 0 : 1, $0.id) < ($1.totalBytes == 0 ? 0 : 1, $1.id) }
-    }
+    private var disks: [DiskMetrics] { store.snapshot.disks }
     private var disk: DiskMetrics? { disks.first { "disk:" + $0.id == selection } }
     private var network: NetworkMetrics? { store.snapshot.networks.first { "network:" + $0.id == selection } }
     private var isGPU: Bool { selection == "gpu" || selection.hasPrefix("gpu:") }
@@ -23,8 +21,8 @@ struct PerformanceView: View {
                 VStack(spacing: 2) {
                     if visibleIDs.contains("cpu") { resourceRow("cpu", title: "CPU", value: MetricFormat.percent(store.snapshot.cpuUsage), color: .blue, values: store.history.map(\.cpu)) }
                     if visibleIDs.contains("memory") { resourceRow("memory", title: "Memory", value: memorySummary, color: .purple, values: store.history.map(\.memory)) }
-                    ForEach(Array(disks.enumerated()), id: \.element.id) { index, item in
-                        if visibleIDs.contains("disk:" + item.id) { resourceRow("disk:" + item.id, title: item.totalBytes > 0 ? item.name : "Disk \(index)", value: item.totalBytes > 0 ? "\(MetricFormat.bytes(item.freeBytes)) free" : MetricFormat.rate(sum(item.readBytesPerSecond, item.writeBytesPerSecond)), color: .green, values: diskValues(item.id, write: false), scale: diskScale(item.id)) }
+                    ForEach(disks) { item in
+                        if visibleIDs.contains("disk:" + item.id) { resourceRow("disk:" + item.id, title: item.name, value: diskSummary(item), color: .green, values: diskValues(item.id, write: false), scale: diskScale(item.id)) }
                     }
                     ForEach(store.snapshot.networks) { item in
                         if visibleIDs.contains("network:" + item.id) { resourceRow("network:" + item.id, title: item.name, value: "S: \(bits(item.sendBytesPerSecond)) R: \(bits(item.receiveBytesPerSecond))", color: .orange, values: networkValues(item.id, send: false), scale: networkScale(item.id)) }
@@ -67,26 +65,33 @@ struct PerformanceView: View {
                         else { cpuContent(height: graphHeight(geometry.size.height), width: geometry.size.width - 52) }
                     }.padding(.horizontal, 26).padding(.top, 20).padding(.bottom, 22)
                 }
-            }
+            }.id(selection)
             }
         }.onChange(of: selection) { isGPUMemoryExpanded = false }
     }
     private var title: String {
         if selection == "memory" { return "Memory" }
-        if let disk, let index = disks.firstIndex(where: { $0.id == disk.id }) { return disk.totalBytes > 0 ? disk.name : "Disk \(index)" }
+        if let disk { return disk.name + (disk.bsdName.map { " (" + $0 + ")" } ?? "") }
         if let network { return network.name }
         if isGPU { return "GPU \(store.snapshot.gpus.firstIndex { $0.id == gpu?.id } ?? 0)" }
         return "CPU"
     }
     private var subtitle: String {
         if selection == "memory" { return MetricFormat.bytes(store.snapshot.memory.totalBytes) }
-        if let disk { return disk.name }
+        if let disk { return disk.model ?? disk.primaryVolume?.name ?? disk.name }
         if let network { return network.id }
         return isGPU ? (gpu?.name ?? hardware.gpuName) : hardware.cpuName
     }
     private var memorySummary: String {
         let m = store.snapshot.memory
         return "\(MetricFormat.bytes(m.usageAvailable ? m.usedBytes : nil))/\(MetricFormat.bytes(m.totalBytes)) (\(MetricFormat.percent(m.usedPercent)))"
+    }
+    private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
+    private func diskSummary(_ disk: DiskMetrics) -> String {
+        if let volume = disk.primaryVolume {
+            return "\(volume.name) · \(MetricFormat.percent(volume.usedPercent)) used"
+        }
+        return "\(disk.bsdName ?? "") · \(MetricFormat.rate(sum(disk.readBytesPerSecond, disk.writeBytesPerSecond)))"
     }
     private func graphHeight(_ available: CGFloat) -> CGFloat { max(190, min(340, available - 265)) }
     private func resourceRow(_ id: String, title: String, value: String, color: Color, values: [Double?], scale: Double = 100) -> some View {
@@ -139,7 +144,11 @@ struct PerformanceView: View {
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
         layout {
             VStack(alignment: .leading, spacing: 15) {
-                HStack(spacing: 34) { metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage)); metric("Speed", "—", help: "Not collected in this build. Apple's powermetrics frequency sampling requires administrator authorization.") }
+                HStack(spacing: 24) {
+                    metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage))
+                    metric("Speed · P cores", frequency(store.snapshot.cpuFrequency.performanceMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                    metric("Speed · E cores", frequency(store.snapshot.cpuFrequency.efficiencyMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                }
                 HStack(spacing: 22) {
                     metric("Processes", String(store.snapshot.processes.count), size: 18)
                     metric("Threads", String(store.snapshot.processes.compactMap(\.threadCount).reduce(0, +)), size: 18)
@@ -159,6 +168,7 @@ struct PerformanceView: View {
                 pair("L3 cache:", MetricFormat.bytes(hardware.l3Bytes))
             }.frame(minWidth: 200)
         }.padding(.top, 4)
+        note("Experimental CPU frequency · Active-time averages for performance and efficiency clusters; idle time is excluded.")
     }
     @ViewBuilder private func memoryContent(height: CGFloat, width: CGFloat) -> some View {
         let m = store.snapshot.memory
@@ -182,6 +192,22 @@ struct PerformanceView: View {
         }
     }
     @ViewBuilder private func diskContent(_ d: DiskMetrics, height: CGFloat) -> some View {
+        ForEach(d.volumes) { volume in
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(volume.name + " · Capacity used").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Text("\(MetricFormat.bytes(volume.usedBytes)) / \(MetricFormat.bytes(volume.totalBytes)) (\(MetricFormat.percent(volume.usedPercent)))")
+                        .font(.system(size: 11)).monospacedDigit()
+                }
+                GeometryReader { geometry in
+                    Rectangle().fill(Color.green.opacity(0.07))
+                        .overlay(alignment: .leading) { Rectangle().fill(Color.green.opacity(0.65)).frame(width: geometry.size.width * (volume.usedPercent ?? 0) / 100) }
+                        .overlay { Rectangle().strokeBorder(Color.green.opacity(0.5), lineWidth: 1) }
+                }.frame(height: 12)
+                Text("Available: \(MetricFormat.bytes(volume.freeBytes)) · \(volume.mountPath)").font(.system(size: 11)).foregroundStyle(.secondary)
+            }.padding(.top, 5)
+        }
         graph("Active time", maximumLabel: "100%", values: [], height: height * 0.8)
             .help("Not collected in this build. Device busy-time counters need driver-specific validation.")
         graph("Disk transfer rate", maximumLabel: MetricFormat.rate(diskScale(d.id)), values: diskValues(d.id, write: false), second: diskValues(d.id, write: true), maximum: diskScale(d.id), height: height * 0.2)
@@ -192,12 +218,15 @@ struct PerformanceView: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .leading, spacing: 6) {
-                pair("Capacity:", d.totalBytes > 0 ? MetricFormat.bytes(d.totalBytes) : "—")
-                pair("Available:", d.totalBytes > 0 ? MetricFormat.bytes(d.freeBytes) : "—")
-                pair("Device:", d.id)
-                pair("Type:", d.totalBytes > 0 ? "Mounted volume" : "Physical device")
+                pair(d.kind == .volume ? "Volume capacity:" : "Drive capacity:", d.totalBytes > 0 ? MetricFormat.bytes(d.totalBytes) : "—")
+                pair("Device:", d.bsdName ?? "—")
+                pair("Type:", d.kind == .image ? "Disk image · virtual" : d.kind == .volume ? "Mounted volume" : "Physical drive")
+                if let connection = d.connection { pair("Connection:", connection) }
+                pair("System disk:", d.volumes.contains(where: { $0.mountPath == "/" }) ? "Yes" : "No")
             }
         }
+        if d.volumes.isEmpty { note("No mounted user volume is associated with this device; used space is unavailable.") }
+        note(d.kind == .volume ? "Mounted filesystem capacity. Device throughput could not be associated with this volume." : "Read/write rates cover this whole device. Capacity used is filesystem space unavailable to ordinary writes; APFS volumes can share container space and are not added together.")
         note("Solid line: read. Dashed line: write. Active time and response time are not collected in this build.")
     }
     @ViewBuilder private func networkContent(_ n: NetworkMetrics, height: CGFloat) -> some View {

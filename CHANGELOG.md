@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Measure experimental native P/E CPU frequencies with validated IOReport residency and frequency tables; no administrator helper.
+- Identify whole storage devices, distinguish disk images, and group verified attached volumes on their drive page.
+- Add per-volume used capacity, percentage and available-space bars while keeping physical capacity separate.
+
 - Keep the More menu, submenus and Settings dropdowns stable during live updates.
 - Hide individual Performance items with preferences retained across app updates.
 - Improve logical processor chart borders, contrast and per-core labels.

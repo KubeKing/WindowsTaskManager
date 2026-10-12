@@ -57,16 +57,41 @@ public struct NetworkMetrics: Identifiable, Sendable {
     public init(id: String, name: String) { self.id = id; self.name = name }
 }
 
+public enum DiskKind: String, Sendable { case physical, image, volume }
+
+public struct DiskVolume: Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var mountPath: String
+    public var totalBytes: UInt64
+    public var freeBytes: UInt64
+    public var usedBytes: UInt64 { totalBytes - min(totalBytes, freeBytes) }
+    public var usedPercent: Double? { totalBytes > 0 ? Double(usedBytes) / Double(totalBytes) * 100 : nil }
+    public init(id: String, name: String, mountPath: String, totalBytes: UInt64, freeBytes: UInt64) {
+        self.id = id; self.name = name; self.mountPath = mountPath
+        self.totalBytes = totalBytes; self.freeBytes = min(totalBytes, freeBytes)
+    }
+}
+
 public struct DiskMetrics: Identifiable, Sendable {
     public var id: String
     public var preferenceID: String? = nil
     public var name: String
     public var mountPath: String
+    public var kind: DiskKind
+    public var bsdName: String? = nil
+    public var model: String? = nil
+    public var connection: String? = nil
+    public var volumes: [DiskVolume] = []
+    public var primaryVolume: DiskVolume? { volumes.first(where: { $0.mountPath == "/" }) ?? volumes.first }
     public var totalBytes: UInt64 = 0
     public var freeBytes: UInt64 = 0
     public var readBytesPerSecond: Double? = nil
     public var writeBytesPerSecond: Double? = nil
-    public init(id: String, name: String, mountPath: String) { self.id = id; self.name = name; self.mountPath = mountPath }
+    public init(id: String, name: String, mountPath: String) {
+        self.id = id; self.name = name; self.mountPath = mountPath
+        kind = id.hasPrefix("io:") ? .physical : .volume
+    }
 }
 
 public struct GPUMetrics: Identifiable, Sendable {
@@ -86,6 +111,7 @@ public struct SystemSnapshot: Sendable {
     public var timestamp: Date = Date()
     public var monotonicTime: Double = 0
     public var processes: [ProcessRecord] = []
+    public var cpuFrequency = CPUFrequencyMetrics()
     public var cpuUsage: Double? = nil
     public var logicalCPUUsage: [Double] = []
     public var cpuKernelUsage: Double? = nil
@@ -130,7 +156,7 @@ public struct HistoryPoint: Identifiable, Sendable {
         networkByID = Dictionary(snapshot.networks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         diskByID = Dictionary(snapshot.disks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         gpuByID = Dictionary(snapshot.gpus.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let devices = snapshot.disks.filter { $0.totalBytes == 0 }
+        let devices = snapshot.disks.filter { $0.kind == .physical }
         let reads = devices.compactMap(\.readBytesPerSecond)
         let writes = devices.compactMap(\.writeBytesPerSecond)
         let processReads = snapshot.processes.compactMap(\.readBytesPerSecond)

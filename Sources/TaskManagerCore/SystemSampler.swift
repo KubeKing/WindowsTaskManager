@@ -13,15 +13,14 @@ public final class SystemSampler {
     private var users: [UInt32: String] = [:]
     private var previousTicks: [[UInt64]] = []
     private var previousNetworks: [String: Pair] = [:]
-    private var previousDiskDevices: [String: Pair] = [:]
-    private var diskCache: [DiskMetrics] = []
-    private var lastDiskRefresh = -Double.infinity
+    private let storageSampler = StorageSampler()
     private let timebase: mach_timebase_info_data_t = {
         var value = mach_timebase_info_data_t()
         mach_timebase_info(&value)
         return value
     }()
     private let gpuSampler = GPUSampler()
+    private let frequencySampler = CPUFrequencySampler()
     private let processorCount = ProcessInfo.processInfo.activeProcessorCount
     private let processorName: String
     private var interfaceNames: [String: String] = [:]
@@ -67,6 +66,7 @@ public final class SystemSampler {
         result.cpuName = processorName
         result.processes = processes(elapsed: elapsed)
         let cpu = cpuMetrics()
+        result.cpuFrequency = frequencySampler.sample()
         result.cpuUsage = cpu.total
         result.logicalCPUUsage = cpu.logical
         result.cpuKernelUsage = cpu.kernel
@@ -307,58 +307,7 @@ public final class SystemSampler {
     }
 
     private func diskMetrics(now: Double, elapsed: Double) -> [DiskMetrics] {
-        // Capacity changes slowly; avoid querying mounted filesystems every tick.
-        if now - lastDiskRefresh > 30 {
-            var mounts: UnsafeMutablePointer<statfs>?
-            let count = getmntinfo(&mounts, MNT_NOWAIT)
-            var disks: [DiskMetrics] = []
-            if let mounts, count > 0 {
-                for index in 0..<Int(count) {
-                    var mount = mounts[index]
-                    let path = withUnsafePointer(to: &mount.f_mntonname) { pointer in
-                        pointer.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
-                    }
-                    let device = withUnsafePointer(to: &mount.f_mntfromname) { pointer in
-                        pointer.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
-                    }
-                    guard device.hasPrefix("/dev/"), path == "/" || path.hasPrefix("/Volumes/") else { continue }
-                    var disk = DiskMetrics(id: device, name: path == "/" ? "Macintosh HD" : URL(fileURLWithPath: path).lastPathComponent, mountPath: path)
-                    disk.totalBytes = mount.f_blocks * UInt64(mount.f_bsize)
-                    disk.freeBytes = mount.f_bavail * UInt64(mount.f_bsize)
-                    disks.append(disk)
-                }
-            }
-            diskCache = disks
-            lastDiskRefresh = now
-        }
-        // Public IOBlockStorageDriver counters are physical-device totals, not APFS volume I/O.
-        // Show them as distinct devices instead of duplicating the same rate on each volume.
-        var iterator: io_iterator_t = 0
-        var devices: [DiskMetrics] = []
-        var counters: [String: Pair] = [:]
-        if IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOBlockStorageDriver"), &iterator) == KERN_SUCCESS {
-            defer { IOObjectRelease(iterator) }
-            while true {
-                let service = IOIteratorNext(iterator)
-                guard service != 0 else { break }
-                defer { IOObjectRelease(service) }
-                var entryID: UInt64 = 0
-                guard IORegistryEntryGetRegistryEntryID(service, &entryID) == KERN_SUCCESS,
-                      let stats = IORegistryEntryCreateCFProperty(service, "Statistics" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String: Any],
-                      let read = stats["Bytes (Read)"] as? NSNumber,
-                      let write = stats["Bytes (Write)"] as? NSNumber else { continue }
-                let id = "io:\(entryID)"
-                let pair = Pair(read: read.uint64Value, write: write.uint64Value)
-                counters[id] = pair
-                var metric = DiskMetrics(id: id, name: "Physical disk \(devices.count + 1)", mountPath: "Device I/O · all volumes")
-                metric.preferenceID = RegistryIdentity.path(of: service)
-                metric.readBytesPerSecond = RateMath.rate(current: pair.read, previous: previousDiskDevices[id]?.read, elapsed: elapsed)
-                metric.writeBytesPerSecond = RateMath.rate(current: pair.write, previous: previousDiskDevices[id]?.write, elapsed: elapsed)
-                devices.append(metric)
-            }
-        }
-        previousDiskDevices = counters
-        return diskCache + devices
+        storageSampler.sample(now: now, elapsed: elapsed)
     }
 
     private static func stringSysctl(_ name: String) -> String? {

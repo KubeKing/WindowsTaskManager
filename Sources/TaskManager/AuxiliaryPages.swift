@@ -433,7 +433,7 @@ struct SettingsPage: View {
                     if availabilityExpanded {
                         Divider()
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("CPU is reported as a share of this Mac's total capacity. Unavailable counters appear as a dash (—).")
+                            Text("CPU is reported as a share of this Mac's total capacity. P/E speed readings use experimental local IOReport counters and exclude idle time. Unsupported or unvalidated counters appear as a dash (—).")
                             Text("GPU activity and memory use are read from available local driver counters. Separate Windows GPU engines, Neural Engine utilization, per-process network, startup impact, protected service controls and user disconnect are unavailable. Startup and services are read-only local inventories.")
                             Text("Task Manager runs with your permissions and does not install an administrator helper.")
                             ForEach(Array(Set(store.snapshot.warnings + store.inventory.warnings)).sorted(), id: \.self) { Text($0) }
