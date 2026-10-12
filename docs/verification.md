@@ -83,3 +83,12 @@ The development Mac exposes completed read/write operation counts and cumulative
 Targeted accelerator/media-driver inspection and IOReport descriptor research found utilization, renderer, tiler and GPU memory readings, plus media energy/bandwidth/power-state channels. No verified separate Video Decode, Video Encode or Copy busy percentage was established on this Mac. Those choices stay clearly unavailable; energy, bandwidth and power residency are not substituted for utilization. This is a hardware/OS verification limit, not a claim that media counters can never be implemented. Research probes are excluded, and no additional runtime IOReport subscription was added.
 
 No external dependency, privileged helper or remote request was added. Raw registry/channel probes, screenshots and local runtime reports remain excluded from public source. The existing v1.0.0 release download is unchanged.
+
+
+## Administrator-helper feasibility — 2026-10-12
+
+Research only: no helper is installed, no app target or runtime behavior changed, and no new release was built. Apple's fs_usage/XNU implementations establish a plausible request-pairing route, but physical/APFS mapping, initial outstanding requests, trace loss, non-read/write operations and tracing ownership must be validated before claiming accurate disk active time. A minimal on-demand native design and metric-by-metric assessment are in docs/admin-helper-investigation.md.
+
+The standalone Swift research diagnostic compiled successfully and passed 12 synthetic parser/interval checks. Its administrator guard rejected an ordinary-user trace. Local symbol checks found the built-in tracing library and required event-range/loss/start/stop functions without enabling tracing. Five unprivileged native CPU samples returned P/E frequencies; base/min/max frequency sysctls returned ENOENT, not a permission error. A live Apple-reference comparison has not yet run.
+
+Noninteractive administrator access was unavailable because sudo required a password. One-time Terminal commands are prepared to collect aggregate disk compatibility/CPU/RSS and CPU-reference reports. They install nothing and retain no raw trace, paths, app names or host identifiers. Text-completion coverage is explicitly not certified Active time, and diagnostic overhead is not a measurement of a future native helper. No end-to-end active-time accuracy or helper resource-budget claim is made.
