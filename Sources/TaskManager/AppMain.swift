@@ -103,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         windows.addItem(NSMenuItem(title: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""))
         NSApp.windowsMenu = windows; NSApp.mainMenu = menu
     }
-    @objc private func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Task Manager", .applicationVersion: "1.0.0", .credits: NSAttributedString(string: "A local system monitor for your Mac.\nBuilt with Swift and Apple frameworks.\nNo accounts, telemetry, or network connections.")]) }
+    @objc private func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Task Manager", .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development", .credits: NSAttributedString(string: "A local system monitor for your Mac.\nBuilt with Swift and Apple frameworks.\nNo accounts, telemetry, or network connections.")]) }
     @objc private func settings() { store.page = .settings }
     @objc private func runTask() { store.launchApplication() }
     @objc private func refresh() { store.refresh() }
