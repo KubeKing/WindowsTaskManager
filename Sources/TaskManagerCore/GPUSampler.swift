@@ -19,6 +19,7 @@ public final class GPUSampler {
             let name = property(service, "model") as? String ?? "GPU"
             let statistics = property(service, "PerformanceStatistics") as? [String: Any] ?? [:]
             var gpu = Self.decode(id: String(registryID), name: name, statistics: statistics)
+            gpu.preferenceID = RegistryIdentity.path(of: service)
             if let configuration = property(service, "GPUConfigurationVariable") as? [String: Any],
                let cores = Self.bytes(configuration["num_cores"]), cores > 0, cores <= UInt64(Int.max) {
                 gpu.coreCount = Int(cores)

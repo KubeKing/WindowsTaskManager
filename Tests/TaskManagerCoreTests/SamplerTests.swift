@@ -3,6 +3,10 @@ import Testing
 @testable import TaskManagerCore
 
 struct SamplerTests {
+    @Test func diskInventoryDoesNotPresentAnonymousDriversAsPhysicalDisks() {
+        let disks = SystemSampler().sample().disks
+        #expect(!disks.contains { $0.name.hasPrefix("Physical disk ") })
+    }
     @Test func firstObservationHasNoRate() {
         #expect(RateMath.rate(current: 100, previous: nil, elapsed: 1) == nil)
     }

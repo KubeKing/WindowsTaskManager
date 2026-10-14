@@ -7,9 +7,7 @@ struct PerformanceView: View {
     private let hardware = HardwareInfo.read()
     private var selection: String { store.performanceSelection }
     private var dates: [Date] { store.history.map(\.timestamp) }
-    private var disks: [DiskMetrics] {
-        store.snapshot.disks.sorted { ($0.totalBytes == 0 ? 0 : 1, $0.id) < ($1.totalBytes == 0 ? 0 : 1, $1.id) }
-    }
+    private var disks: [DiskMetrics] { store.snapshot.disks }
     private var disk: DiskMetrics? { disks.first { "disk:" + $0.id == selection } }
     private var network: NetworkMetrics? { store.snapshot.networks.first { "network:" + $0.id == selection } }
     private var isGPU: Bool { selection == "gpu" || selection.hasPrefix("gpu:") }
@@ -17,27 +15,33 @@ struct PerformanceView: View {
     private var tint: Color { selection == "memory" ? .purple : disk != nil ? .green : network != nil ? .orange : isGPU ? .purple : .blue }
 
     var body: some View {
+        let visibleIDs = Set(store.visiblePerformanceItems.map(\.id))
         HStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 2) {
-                    resourceRow("cpu", title: "CPU", value: MetricFormat.percent(store.snapshot.cpuUsage), color: .blue, values: store.history.map(\.cpu))
-                    resourceRow("memory", title: "Memory", value: memorySummary, color: .purple, values: store.history.map(\.memory))
-                    ForEach(Array(disks.enumerated()), id: \.element.id) { index, item in
-                        resourceRow("disk:" + item.id, title: item.totalBytes > 0 ? item.name : "Disk \(index)", value: item.totalBytes > 0 ? "\(MetricFormat.bytes(item.freeBytes)) free" : MetricFormat.rate(sum(item.readBytesPerSecond, item.writeBytesPerSecond)), color: .green, values: diskValues(item.id, write: false), scale: diskScale(item.id))
+                    if visibleIDs.contains("cpu") { resourceRow("cpu", title: "CPU", value: MetricFormat.percent(store.snapshot.cpuUsage), color: .blue, values: store.history.map(\.cpu)) }
+                    if visibleIDs.contains("memory") { resourceRow("memory", title: "Memory", value: memorySummary, color: .purple, values: store.history.map(\.memory)) }
+                    ForEach(disks) { item in
+                        if visibleIDs.contains("disk:" + item.id) { resourceRow("disk:" + item.id, title: item.name, value: diskSummary(item), color: .green, values: diskValues(item.id, write: false), scale: diskScale(item.id)) }
                     }
                     ForEach(store.snapshot.networks) { item in
-                        resourceRow("network:" + item.id, title: item.name, value: "S: \(bits(item.sendBytesPerSecond)) R: \(bits(item.receiveBytesPerSecond))", color: .orange, values: networkValues(item.id, send: false), scale: networkScale(item.id))
+                        if visibleIDs.contains("network:" + item.id) { resourceRow("network:" + item.id, title: item.name, value: "S: \(bits(item.sendBytesPerSecond)) R: \(bits(item.receiveBytesPerSecond))", color: .orange, values: networkValues(item.id, send: false), scale: networkScale(item.id)) }
                     }
-                    if store.snapshot.gpus.isEmpty {
+                    if store.snapshot.gpus.isEmpty && visibleIDs.contains("gpu") {
                         resourceRow("gpu", title: "GPU 0", value: hardware.gpuName + " · —", color: .purple, values: [])
                     } else {
                         ForEach(Array(store.snapshot.gpus.enumerated()), id: \.element.id) { index, item in
-                            resourceRow("gpu:" + item.id, title: "GPU \(index)", value: item.name + " · " + MetricFormat.percent(item.utilization), color: .purple, values: gpuValues(item.id, \.utilization))
+                            if visibleIDs.contains("gpu:" + item.id) { resourceRow("gpu:" + item.id, title: "GPU \(index)", value: item.name + " · " + MetricFormat.percent(item.utilization), color: .purple, values: gpuValues(item.id, \.utilization)) }
                         }
                     }
                 }.padding(.horizontal, 8).padding(.top, 10)
             }.frame(width: 206).background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
             Divider()
+            if visibleIDs.isEmpty {
+                ContentUnavailableView { Label("All performance items are hidden", systemImage: "eye.slash") } description: {
+                    Text("Show items from the More menu or Settings.")
+                } actions: { Button("Show all performance items") { store.showAllPerformanceItems() } }
+            } else {
             GeometryReader { geometry in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 13) {
@@ -61,25 +65,33 @@ struct PerformanceView: View {
                         else { cpuContent(height: graphHeight(geometry.size.height), width: geometry.size.width - 52) }
                     }.padding(.horizontal, 26).padding(.top, 20).padding(.bottom, 22)
                 }
+            }.id(selection)
             }
         }.onChange(of: selection) { isGPUMemoryExpanded = false }
     }
     private var title: String {
         if selection == "memory" { return "Memory" }
-        if let disk, let index = disks.firstIndex(where: { $0.id == disk.id }) { return disk.totalBytes > 0 ? disk.name : "Disk \(index)" }
+        if let disk { return disk.name + (disk.bsdName.map { " (" + $0 + ")" } ?? "") }
         if let network { return network.name }
         if isGPU { return "GPU \(store.snapshot.gpus.firstIndex { $0.id == gpu?.id } ?? 0)" }
         return "CPU"
     }
     private var subtitle: String {
         if selection == "memory" { return MetricFormat.bytes(store.snapshot.memory.totalBytes) }
-        if let disk { return disk.name }
+        if let disk { return disk.model ?? disk.primaryVolume?.name ?? disk.name }
         if let network { return network.id }
         return isGPU ? (gpu?.name ?? hardware.gpuName) : hardware.cpuName
     }
     private var memorySummary: String {
         let m = store.snapshot.memory
         return "\(MetricFormat.bytes(m.usageAvailable ? m.usedBytes : nil))/\(MetricFormat.bytes(m.totalBytes)) (\(MetricFormat.percent(m.usedPercent)))"
+    }
+    private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
+    private func diskSummary(_ disk: DiskMetrics) -> String {
+        if let volume = disk.primaryVolume {
+            return "\(volume.name) · \(MetricFormat.percent(volume.usedPercent)) used"
+        }
+        return "\(disk.bsdName ?? "") · \(MetricFormat.rate(sum(disk.readBytesPerSecond, disk.writeBytesPerSecond)))"
     }
     private func graphHeight(_ available: CGFloat) -> CGFloat { max(190, min(340, available - 265)) }
     private func resourceRow(_ id: String, title: String, value: String, color: Color, values: [Double?], scale: Double = 100) -> some View {
@@ -95,35 +107,54 @@ struct PerformanceView: View {
                 .background(selection == id ? Color.primary.opacity(0.075) : .clear, in: RoundedRectangle(cornerRadius: store.appearance == .macOS ? 8 : 0))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
+        .overlay(StableContextMenu {
+            [
+                .action("Hide \(title)") {
+                    if let item = store.performanceItems.first(where: { $0.id == id }) { store.setPerformanceItem(item, shown: false) }
+                },
+                .action("Show all performance items") { store.showAllPerformanceItems() }
+            ]
+        })
     }
     @ViewBuilder private func cpuContent(height: CGFloat, width: CGFloat) -> some View {
         VStack(spacing: 5) {
-            axis("% Utilization", maximum: "100%")
             if store.cpuGraphLogical {
+                Text("P · Performance cores    E · Efficiency cores").font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 let count = max(1, hardware.logicalCPUs)
                 let columns = count > 16 ? 6 : count > 8 ? 5 : count > 4 ? 4 : 2
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: columns), spacing: 5) {
+                let rows = (count + columns - 1) / columns
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                     ForEach(0..<count, id: \.self) { index in
-                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue)
-                            .frame(height: (height - CGFloat((count + columns - 1) / columns - 1) * 5) / CGFloat((count + columns - 1) / columns))
-                            .help("Logical processor \(index + 1)")
+                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil)
+                        .frame(height: (height - CGFloat(rows - 1) * 8) / CGFloat(rows))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Logical processor \(index + 1), \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core, \(MetricFormat.percent(store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil))")
+                        .help("Logical processor \(index + 1) · \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core · 0–100% utilization")
                     }
                 }
             } else {
+                axis("% Utilization", maximum: "100%")
                 ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue).frame(height: height)
             }
             timeAxis
-        }.contextMenu {
-            Menu("Change graph to") {
-                Button { store.cpuGraphLogical = false } label: { Label("Overall utilization", systemImage: store.cpuGraphLogical ? "circle" : "checkmark") }
-                Button { store.cpuGraphLogical = true } label: { Label("Logical processors", systemImage: store.cpuGraphLogical ? "checkmark" : "circle") }
-            }
-            Toggle("Show kernel times", isOn: $store.showKernelTimes)
-        }
+        }.overlay(StableContextMenu {
+            [
+                .submenu("Change graph to", [
+                    .action("Overall utilization", checked: !store.cpuGraphLogical) { store.cpuGraphLogical = false },
+                    .action("Logical processors", checked: store.cpuGraphLogical) { store.cpuGraphLogical = true }
+                ]),
+                .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() }
+            ]
+        })
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
         layout {
             VStack(alignment: .leading, spacing: 15) {
-                HStack(spacing: 34) { metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage)); metric("Speed", "—", help: "Live processor frequency is not available through public macOS counters.") }
+                HStack(spacing: 24) {
+                    metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage))
+                    metric("Speed · P cores", frequency(store.snapshot.cpuFrequency.performanceMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                    metric("Speed · E cores", frequency(store.snapshot.cpuFrequency.efficiencyMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                }
                 HStack(spacing: 22) {
                     metric("Processes", String(store.snapshot.processes.count), size: 18)
                     metric("Threads", String(store.snapshot.processes.compactMap(\.threadCount).reduce(0, +)), size: 18)
@@ -143,6 +174,7 @@ struct PerformanceView: View {
                 pair("L3 cache:", MetricFormat.bytes(hardware.l3Bytes))
             }.frame(minWidth: 200)
         }.padding(.top, 4)
+        note("Experimental CPU frequency · Active-time averages for performance and efficiency clusters; idle time is excluded.")
     }
     @ViewBuilder private func memoryContent(height: CGFloat, width: CGFloat) -> some View {
         let m = store.snapshot.memory
@@ -166,23 +198,42 @@ struct PerformanceView: View {
         }
     }
     @ViewBuilder private func diskContent(_ d: DiskMetrics, height: CGFloat) -> some View {
-        graph("Active time", maximumLabel: "100%", values: [], height: height * 0.8)
-            .help("Device active time is not exposed by supported public macOS counters.")
+        ForEach(d.volumes) { volume in
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(volume.name + " · Capacity used").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Text("\(MetricFormat.bytes(volume.usedBytes)) / \(MetricFormat.bytes(volume.totalBytes)) (\(MetricFormat.percent(volume.usedPercent)))")
+                        .font(.system(size: 11)).monospacedDigit()
+                }
+                GeometryReader { geometry in
+                    Rectangle().fill(Color.green.opacity(0.07))
+                        .overlay(alignment: .leading) { Rectangle().fill(Color.green.opacity(0.65)).frame(width: geometry.size.width * (volume.usedPercent ?? 0) / 100) }
+                        .overlay { Rectangle().strokeBorder(Color.green.opacity(0.5), lineWidth: 1) }
+                }.frame(height: 12)
+                Text("Available: \(MetricFormat.bytes(volume.freeBytes)) · \(volume.mountPath)").font(.system(size: 11)).foregroundStyle(.secondary)
+            }.padding(.top, 5)
+        }
+        graph("Active time", maximumLabel: "100%", values: [], height: height * 0.8, unavailableText: "Active time unavailable\nNo validated disk busy-time counter")
+            .help("Percentage of time this drive is busy handling I/O, not storage capacity used. Request timings may overlap and cannot establish this percentage.")
         graph("Disk transfer rate", maximumLabel: MetricFormat.rate(diskScale(d.id)), values: diskValues(d.id, write: false), second: diskValues(d.id, write: true), maximum: diskScale(d.id), height: height * 0.2)
         HStack(alignment: .top, spacing: 35) {
             VStack(alignment: .leading, spacing: 17) {
-                HStack(spacing: 28) { metric("Active time", "—"); metric("Average response time", "—") }
+                HStack(spacing: 28) { metric("Active time", "—"); metric("Average response time", d.averageResponseMilliseconds.map { String(format: "%.2f ms", $0) } ?? "—", help: "Mean duration of completed I/O requests from this device’s driver counters; unavailable when no I/O completes.") }
                 HStack(spacing: 28) { metric("Read speed", MetricFormat.rate(d.readBytesPerSecond), size: 20); metric("Write speed", MetricFormat.rate(d.writeBytesPerSecond), size: 20) }
             }
             Spacer(minLength: 0)
             VStack(alignment: .leading, spacing: 6) {
-                pair("Capacity:", d.totalBytes > 0 ? MetricFormat.bytes(d.totalBytes) : "—")
-                pair("Available:", d.totalBytes > 0 ? MetricFormat.bytes(d.freeBytes) : "—")
-                pair("Device:", d.id)
-                pair("Type:", d.totalBytes > 0 ? "Mounted volume" : "Physical device")
+                pair(d.kind == .volume ? "Volume capacity:" : "Drive capacity:", d.totalBytes > 0 ? MetricFormat.bytes(d.totalBytes) : "—")
+                pair("Device:", d.bsdName ?? "—")
+                pair("Type:", d.kind == .image ? "Disk image · virtual" : d.kind == .volume ? "Mounted volume" : "Physical drive")
+                if let connection = d.connection { pair("Connection:", connection) }
+                pair("System disk:", d.volumes.contains(where: { $0.mountPath == "/" }) ? "Yes" : "No")
             }
         }
-        note("Solid line: read. Dashed line: write. Active time and response time are unavailable on macOS.")
+        if d.volumes.isEmpty { note("No mounted user volume is associated with this device; used space is unavailable.") }
+        note(d.kind == .volume ? "Mounted filesystem capacity. Device throughput could not be associated with this volume." : "Read/write rates cover this whole device. Capacity used is filesystem space unavailable to ordinary writes; APFS volumes can share container space and are not added together.")
+        note("Solid line: read. Dashed line: write. Active time is the percentage of time the drive is busy, separate from capacity used. No validated busy-time reading is available on this Mac.")
     }
     @ViewBuilder private func networkContent(_ n: NetworkMetrics, height: CGFloat) -> some View {
         graph("Throughput", maximumLabel: bits(networkScale(n.id)), values: networkValues(n.id, send: false), second: networkValues(n.id, send: true), maximum: networkScale(n.id), height: height)
@@ -198,11 +249,9 @@ struct PerformanceView: View {
         let peakMemory = store.history.compactMap { $0.gpuByID[id] }.flatMap { [$0.memoryInUseBytes, $0.memoryAllocatedBytes].compactMap { $0 } }.max() ?? 0
         let memoryScale = max(1, store.snapshot.memory.totalBytes, peakMemory)
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            graph("GPU utilization", maximumLabel: "100%", values: gpuValues(id, \.utilization), height: height / 2 - 22)
-            graph("Renderer", maximumLabel: "100%", values: gpuValues(id, \.rendererUtilization), height: height / 2 - 22)
-            graph("Tiler", maximumLabel: "100%", values: gpuValues(id, \.tilerUtilization), height: height / 2 - 22)
-            graph("Video Decode", maximumLabel: "—", values: [], height: height / 2 - 22)
-                .help("The driver does not expose a separate Video Decode utilization counter.")
+            ForEach(0..<store.gpuChartLayout.metrics.count, id: \.self) { slot in
+                gpuChart(slot: slot, id: id, memoryScale: memoryScale, height: height / 2 - 22)
+            }
         }
         VStack(spacing: 5) {
             HStack {
@@ -230,7 +279,29 @@ struct PerformanceView: View {
         }
         note(gpu?.utilization == nil && gpu?.rendererUtilization == nil && gpu?.tilerUtilization == nil
              ? "GPU counters are unavailable from this Mac's driver."
-             : "Live driver-reported GPU, renderer and tiler activity. Apple silicon shares system memory; allocated memory can include reusable allocations. Separate Copy and Video engine counters are unavailable.")
+             : "Choose a metric above each chart; choices are saved. GPU, renderer, tiler and memory readings come from the driver. Video Decode, Video Encode and Copy percentages have no validated reading on this Mac. Allocated memory may include reusable allocations.")
+    }
+    private func gpuChart(slot: Int, id: String, memoryScale: UInt64, height: CGFloat) -> some View {
+        let metric = store.gpuChartLayout.metrics[slot]
+        let values = store.history.map { metric.value(in: $0.gpuByID[id]) }
+        return VStack(spacing: 5) {
+            HStack(spacing: 8) {
+                GPUChartMetricMenu(slot: slot, selected: metric, gpu: gpu) { store.setGPUChartMetric($0, at: slot) }
+                    .frame(minWidth: 0, maxWidth: .infinity).frame(height: 18)
+                Text(metric.isMemory ? MetricFormat.bytes(memoryScale) : "100%")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
+            }
+            ResourcePlot(values: values, dates: dates, maximum: metric.isMemory ? Double(memoryScale) : 100, color: tint)
+                .frame(height: height)
+                .overlay {
+                    if !values.contains(where: { $0 != nil }) {
+                        Text("Unavailable").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
+                .help(metric.value(in: gpu) == nil ? metric.unavailableReason : metric.title)
+                .accessibilityLabel("GPU chart \(slot + 1): \(metric.title)")
+            timeAxis
+        }
     }
     private func gpuValues(_ id: String, _ keyPath: KeyPath<GPUMetrics, Double?>) -> [Double?] {
         store.history.map { $0.gpuByID[id]?[keyPath: keyPath] }
@@ -241,11 +312,17 @@ struct PerformanceView: View {
             return value.map { Double($0) }
         }
     }
-    private func graph(_ label: String, maximumLabel: String, values: [Double?], second: [Double?] = [], maximum: Double = 100, height: CGFloat) -> some View {
-        VStack(spacing: 5) { axis(label, maximum: maximumLabel); ResourcePlot(values: values, dates: dates, secondValues: second, maximum: maximum, color: tint).frame(height: height).overlay { if !values.contains(where: { $0 != nil }) { Text("—").font(.system(size: 16)).foregroundStyle(.secondary) } }; timeAxis }
+    private func graph(_ label: String, maximumLabel: String, values: [Double?], second: [Double?] = [], maximum: Double = 100, height: CGFloat, unavailableText: String? = nil) -> some View {
+        VStack(spacing: 5) { axis(label, maximum: maximumLabel); ResourcePlot(values: values, dates: dates, secondValues: second, maximum: maximum, color: tint).frame(height: height).overlay { if !values.contains(where: { $0 != nil }) { Text(unavailableText ?? "—").font(.system(size: unavailableText == nil ? 16 : 12)).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(12) } }; timeAxis }
     }
     private func axis(_ label: String, maximum: String) -> some View { HStack { Text(label); Spacer(); Text(maximum) }.font(.system(size: 11)).foregroundStyle(.secondary) }
-    private var timeAxis: some View { HStack { Text("\(Int(max(60, (dates.last ?? Date()).timeIntervalSince(dates.first ?? Date())))) seconds"); Spacer(); Text("0") }.font(.system(size: 10)).foregroundStyle(.secondary) }
+    private var timeAxis: some View {
+        let seconds = Int(max(60, (dates.last ?? Date()).timeIntervalSince(dates.first ?? Date())))
+        let span = seconds < 60 ? "\(seconds)s" : seconds % 60 == 0 ? "\(seconds / 60)m" : "\(seconds / 60)m \(seconds % 60)s"
+        return HStack { Text(span + " ago"); Spacer(); Text("Latest sample") }
+            .font(.system(size: 10)).foregroundStyle(.secondary)
+            .help("Time runs from older samples on the left to the latest recorded sample on the right. The graph shows at least one minute; its span depends on sampling speed and pauses.")
+    }
     private func metric(_ title: String, _ value: String, size: CGFloat = 24, help: String = "") -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(.system(size: 11)).foregroundStyle(.secondary); Text(value).font(.system(size: size, weight: .regular)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8) }.help(help)
     }
@@ -278,21 +355,35 @@ struct ResourcePlot: View {
     var maximum: Double = 100
     var color: Color = .blue
     var compact = false
+    var logical = false
+    var logicalTitle: String? = nil
+    var currentUsage: Double? = nil
     var overlays: [ResourcePlotOverlay] = []
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        Canvas { context, size in
-            let rect = CGRect(origin: .zero, size: size)
+        Canvas { context, canvasSize in
+            var size = canvasSize
+            if let logicalTitle {
+                let title = Text(logicalTitle).font(.system(size: 10)).foregroundColor(.secondary)
+                let usage = Text(MetricFormat.percent(currentUsage)).font(.system(size: 10)).monospacedDigit().foregroundColor(.secondary)
+                context.draw(title, at: .zero, anchor: .topLeading)
+                context.draw(usage, at: CGPoint(x: size.width, y: 0), anchor: .topTrailing)
+                context.translateBy(x: 0, y: 16)
+                size.height = max(1, size.height - 16)
+            }
+            // Stroke entirely inside the canvas: an edge-centered stroke is clipped.
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5)
             context.fill(Path(rect), with: .color(color.opacity(0.035)))
             var grid = Path()
-            for i in 0...10 { let x = size.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: 0)); grid.addLine(to: CGPoint(x: x, y: size.height)) }
-            for i in 0...5 { let y = size.height * Double(i) / 5; grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y)) }
-            context.stroke(grid, with: .color(color.opacity(compact ? 0.09 : 0.13)), lineWidth: 0.5)
+            for i in 1..<10 { let x = rect.minX + rect.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: rect.minY)); grid.addLine(to: CGPoint(x: x, y: rect.maxY)) }
+            for i in 1..<5 { let y = rect.minY + rect.height * Double(i) / 5; grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y)) }
+            context.stroke(grid, with: .color(color.opacity(compact ? 0.12 : scheme == .dark ? 0.24 : 0.18)), lineWidth: 0.5)
             draw(values, size: size, context: &context, dashed: false)
             if !secondValues.isEmpty { draw(secondValues, size: size, context: &context, dashed: true) }
             for overlay in overlays {
                 draw(overlay.values, size: size, context: &context, dashed: true, lineColor: overlay.color, lineDash: overlay.dash)
             }
-            context.stroke(Path(rect), with: .color(color.opacity(0.3)), lineWidth: 1)
+            context.stroke(Path(rect), with: .color(color.opacity(scheme == .dark ? 0.7 : 0.5)), lineWidth: 1)
         }
     }
     private func draw(_ values: [Double?], size: CGSize, context: inout GraphicsContext, dashed: Bool, lineColor: Color? = nil, lineDash: [CGFloat]? = nil) {
@@ -322,7 +413,7 @@ struct ResourcePlot: View {
                 var fill = line; fill.addLine(to: CGPoint(x: last.x, y: size.height)); fill.addLine(to: CGPoint(x: first.x, y: size.height)); fill.closeSubpath()
                 context.fill(fill, with: .linearGradient(Gradient(colors: [color.opacity(0.22), color.opacity(0.025)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
             }
-            context.stroke(line, with: .color((lineColor ?? color).opacity(lineColor != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
+            context.stroke(line, with: .color((lineColor ?? color).opacity(lineColor != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : logical ? 1.2 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
         }
     }
 }

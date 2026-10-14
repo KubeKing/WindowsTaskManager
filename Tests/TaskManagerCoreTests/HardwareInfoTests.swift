@@ -3,6 +3,16 @@ import Testing
 @testable import TaskManagerCore
 
 struct HardwareInfoTests {
+    @Test func coreKindsFollowLogicalIDsRatherThanEnumerationOrder() {
+        let kinds = CPUCoreTopology.kinds(entries: [(2, Data([80, 0])), (0, Data([69, 0]))], logicalCount: 3)
+        #expect(kinds[0] == .efficiency)
+        #expect(kinds[2] == .performance)
+        #expect(kinds[1] == nil)
+    }
+    @Test func coreKindsDoNotGuessMissingMalformedOrConflictingMappings() {
+        let kinds = CPUCoreTopology.kinds(entries: [(0, Data([69, 0])), (0, Data([80, 0])), (1, Data([77, 0])), (2, Data([80])), (9, Data([80, 0]))], logicalCount: 3)
+        #expect(kinds.isEmpty)
+    }
     @Test func hardwareSnapshotHasRealCoreCountsAndStableIdentity() {
         let hardware = HardwareInfo.read()
         #expect(hardware.physicalCPUs > 0)
