@@ -6,7 +6,7 @@ A Swift system monitor with Windows Task Manager's familiar navigation and dense
 
 Requires an Apple silicon Mac on macOS 27 or later.
 
-Download **TaskManager-v1.1.0-macOS-arm64.zip** from [Releases](https://github.com/KubeKing/WindowsTaskManager/releases/latest), unzip it, and move **Task Manager.app** to Applications. The download is ad-hoc signed, not Developer ID signed or notarized; macOS Gatekeeper may block it. Building from source is also supported.
+Download **TaskManager-v1.2.0-macOS-arm64.zip** from [Releases](https://github.com/KubeKing/WindowsTaskManager/releases/latest), unzip it, and move **Task Manager.app** to Applications. The download is ad-hoc signed, not Developer ID signed or notarized; macOS Gatekeeper may block it. Building from source is also supported.
 
 To build, install Apple's Swift command-line tools. There are no third-party packages to download.
 

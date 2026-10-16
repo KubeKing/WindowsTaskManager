@@ -1,19 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-10-16
 
-- Clarify graph time axes with Now while monitoring and Paused when frozen, including enlarged GPU memory.
+- Use a fixed configurable 30-second to 10-minute window across all Performance graphs; incoming samples scroll without compressing the timeline. Right endpoints read Now while monitoring and Paused when frozen.
+- Add a granular memory-pressure curve using the native kernel reading used by the inspected Activity Monitor, with a fixed 0–100 scale and separate green/yellow/red pressure-state colors. Missing readings and sampling gaps remain blank.
+- Always show readable CPU/GPU **Temp · avg** summaries beside Utilization. Independently saved graph toggles in Settings and chart right-click menus hide only overlays, temperature axes and chart badges; existing shared choices migrate automatically.
+- Add dashed temperature history with a 20–100 °C axis and ticks at 20, 40, 60, 80 and 100 °C. Colors change at the chart thresholds between samples without carrying hotter colors into cooler tails or restarting the dash pattern.
+- Keep GPU temperature overlays only on boxes set to GPU utilization. Omit unverified per-core temperature UI and move the temperature color guide to Settings.
 
-- Save CPU and GPU temperature graph visibility independently in Settings and chart context menus, preserving the previous shared choice during migration.
-
-- Add the saved Show temperature graph toggle to GPU utilization charts’ stable right-click menus; bottom temperature summaries remain visible.
-
-- Color temperature dashes at the exact 60/80/100 °C chart boundaries with a continuous dash pattern, avoiding hotter colors extending into cooler tails.
-
-- Add a granular memory-pressure curve using Activity Monitor’s native kernel reading and fixed 0–100 scale, with independent green/yellow/red pressure-state colors, the shared graph window and explicit unavailable gaps.
-
-- Use a fixed configurable 30-second to 10-minute time window across every Performance graph; new samples scroll without compressing history.
-- Always show native CPU/GPU **Temp · avg** summaries beside Utilization. Independent saved CPU/GPU graph toggles add temperature-colored dashed history with a separate 20–100 °C scale and five labeled ticks; sampling continues while hidden. Logical processor charts omit temperature UI; GPU temperature appears only in utilization boxes. The color guide lives in Settings rather than chart footers. No admin helper or external dependency.
+Runs offline without administrator access, a helper or third-party packages. Temperature discovery and granular memory pressure use optional undocumented native interfaces; unsupported readings stay unavailable. Temperature bands are display guidance, not Apple hardware limits or proof of throttling. Existing Apple silicon / macOS 27 requirements remain unchanged.
 
 ## 1.1.0 — 2026-10-14
 
