@@ -369,6 +369,9 @@ struct SettingsPage: View {
     @ViewState private var otherOptionsExpanded = true
     @ViewState private var availabilityExpanded = false
     private var mac: Bool { store.appearance == .macOS }
+    private var temperatureGuide: String {
+        "Temperature colors: Green · Safe below 60 °C; Yellow · Warm 60–<80 °C; Red · Hot 80–<100 °C; Purple · Throttling risk at 100 °C or above. Purple also indicates macOS serious/critical thermal pressure, which affects system performance. These are display bands, not Apple hardware limits. Graphs span 20–100 °C; values outside this range reach the chart edge while the badge retains the actual reading."
+    }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -393,9 +396,13 @@ struct SettingsPage: View {
                     settingRow("Graph time window", detail: "One fixed time scale for all Performance graphs, including logical CPUs and GPU memory", symbol: "clock") {
                         StablePicker(title: "Graph time window", selection: $store.graphWindow, choices: GraphTimeWindow.allCases.map { ($0.label, $0) }).frame(width: 175)
                     }
-                    settingRow("Temperature graph", detail: "Overlay °C history on CPU/GPU activity charts. Summary temperatures are always shown.", symbol: "thermometer") {
-                        Toggle("Show temperature graph", isOn: $store.showTemperatureGraph).toggleStyle(.checkbox)
-                    }
+                    settingRow("Temperature graph", detail: "Overlay °C history on overall CPU and GPU utilization graphs. Summary temperatures are always shown.", symbol: "thermometer") {
+                        HStack(spacing: 8) {
+                            Toggle("Show temperature graph", isOn: $store.showTemperatureGraph).toggleStyle(.checkbox)
+                            Image(systemName: "info.circle").foregroundStyle(.secondary)
+                                .help(temperatureGuide).accessibilityLabel(temperatureGuide)
+                        }
+                    }.help(temperatureGuide)
                     VStack(spacing: 0) {
                         disclosureHeader("Window management", detail: "Specify default Task Manager window behavior", symbol: "macwindow.on.rectangle", expanded: $windowOptionsExpanded)
                         if windowOptionsExpanded {

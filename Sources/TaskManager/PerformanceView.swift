@@ -114,28 +114,11 @@ struct PerformanceView: View {
             .padding(.horizontal, 5).padding(.vertical, 3)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
             .padding(5).padding(.trailing, 44).allowsHitTesting(false)
-            .help(temperatureGuide + " " + store.snapshot.temperatures.note)
+            .help(store.snapshot.temperatures.note)
     }
     private func temperatureHistory(_ series: TemperatureSeries) -> [ResourcePlotOverlay] {
         guard store.showTemperatureGraph else { return [] }
         return [ResourcePlotOverlay(values: store.history.map { series.value(in: $0) }, color: .green, dash: [5, 3], maximum: TemperatureScale.maximum, minimum: TemperatureScale.minimum, sampleColors: store.history.map { temperatureColor(TemperatureBand.classify(series.value(in: $0), pressure: $0.temperatures.thermalPressure)) })]
-    }
-    private var temperatureGuide: String {
-        "Temperature color guide: green below 60 °C; yellow 60–<80 °C; red 80–<100 °C; purple at 100 °C+ means throttling risk. Purple also indicates macOS serious/critical thermal pressure, which affects system performance and is not a per-core throttling measurement. These are display bands, not Apple hardware limits. Values outside 20–100 °C reach the chart edge; the badge retains the actual reading."
-    }
-    private func temperatureLegend(perCore: Bool = false) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                Text(perCore ? "Temp per core · unavailable without verified mapping" : "┄ Temp · avg")
-                Spacer(minLength: 0)
-                Text("Safe <60").foregroundStyle(.green)
-                Text("Warm 60–<80").foregroundStyle(.yellow)
-                Text("Hot 80–<100").foregroundStyle(.red)
-                Text("Throttling risk 100+ / system limiting").foregroundStyle(.purple)
-                Text("°C")
-            }
-            Text(perCore ? "Temp per core · unavailable · 20–100 °C" : "┄ Temp · avg · 20–100 °C · colors: Safe / Warm / Hot / Throttling risk")
-        }.font(.system(size: 10)).foregroundStyle(.secondary).help(temperatureGuide)
     }
     private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
     private func diskSummary(_ disk: DiskMetrics) -> String {
@@ -177,17 +160,10 @@ struct PerformanceView: View {
                 let rows = (count + columns - 1) / columns
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                     ForEach(0..<count, id: \.self) { index in
-                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil, overlays: temperatureHistory(.logicalCore(index)), temperatureAxis: store.showTemperatureGraph)
+                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil)
                         .frame(height: (height - CGFloat(rows - 1) * 8) / CGFloat(rows))
-                        .overlay(alignment: .topTrailing) {
-                            if store.showTemperatureGraph {
-                                temperatureOverlay(store.snapshot.temperatures.logicalCoreCelsius[index], label: "Temp")
-                                    .padding(.top, 16)
-                            }
-                        }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Logical processor \(index + 1), \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core, \(MetricFormat.percent(store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil))")
-                        .accessibilityValue(store.showTemperatureGraph ? "Temperature " + (store.snapshot.temperatures.logicalCoreCelsius[index].map { temperature($0) } ?? "unavailable") : "")
                         .help("Logical processor \(index + 1) · \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core · 0–100% utilization")
                     }
                 }
@@ -198,9 +174,6 @@ struct PerformanceView: View {
                         if store.showTemperatureGraph { temperatureOverlay(store.snapshot.temperatures.cpuAverageCelsius, label: "Temp · avg") }
                     }
             }
-            if store.showTemperatureGraph {
-                temperatureLegend(perCore: store.cpuGraphLogical)
-            }
             timeAxis
         }.overlay(StableContextMenu {
             [
@@ -208,9 +181,10 @@ struct PerformanceView: View {
                     .action("Overall utilization", checked: !store.cpuGraphLogical) { store.cpuGraphLogical = false },
                     .action("Logical processors", checked: store.cpuGraphLogical) { store.cpuGraphLogical = true }
                 ]),
-                .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() },
+                .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() }
+            ] + (store.cpuGraphLogical ? [] : [
                 .action("Show temperature graph", checked: store.showTemperatureGraph) { store.showTemperatureGraph.toggle() }
-            ]
+            ])
         })
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
         layout {
@@ -245,7 +219,7 @@ struct PerformanceView: View {
                 pair("L3 cache:", MetricFormat.bytes(hardware.l3Bytes))
             }.frame(minWidth: 200)
         }.padding(.top, 4)
-        note("CPU temperature averages readable die sensors, not individual cores. Unverified per-core temperatures remain unavailable (—). Sensors refresh at most every two seconds.")
+        note("CPU temperature averages readable die sensors. Sensors refresh at most every two seconds.")
         note("Experimental CPU frequency · Active-time averages for performance and efficiency clusters; idle time is excluded.")
     }
     @ViewBuilder private func memoryContent(height: CGFloat, width: CGFloat) -> some View {
@@ -357,7 +331,7 @@ struct PerformanceView: View {
     private func gpuChart(slot: Int, id: String, memoryScale: UInt64, height: CGFloat) -> some View {
         let metric = store.gpuChartLayout.metrics[slot]
         let values = store.history.map { metric.value(in: $0.gpuByID[id]) }
-        let showsTemperature = store.showTemperatureGraph && [.utilization, .renderer, .tiler].contains(metric)
+        let showsTemperature = store.showTemperatureGraph && metric == .utilization
         return VStack(spacing: 5) {
             HStack(spacing: 8) {
                 GPUChartMetricMenu(slot: slot, selected: metric, gpu: gpu) { store.setGPUChartMetric($0, at: slot) }
@@ -379,7 +353,6 @@ struct PerformanceView: View {
                 }
                 .help(metric.value(in: gpu) == nil ? metric.unavailableReason : metric.title)
                 .accessibilityLabel("GPU chart \(slot + 1): \(metric.title)")
-            if showsTemperature { temperatureLegend() }
             timeAxis
         }
     }
