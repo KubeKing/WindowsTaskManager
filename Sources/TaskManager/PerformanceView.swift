@@ -379,9 +379,11 @@ struct PerformanceView: View {
     }
     private func axis(_ label: String, maximum: String) -> some View { HStack { Text(label); Spacer(); Text(maximum) }.font(.system(size: 11)).foregroundStyle(.secondary) }
     private var timeAxis: some View {
-        return HStack { Text(store.graphWindow.axisLabel); Spacer(); Text("Latest sample") }
+        return HStack { Text(store.graphWindow.axisLabel); Spacer(); Text(store.isPaused ? "Paused" : "Now") }
             .font(.system(size: 10)).foregroundStyle(.secondary)
-            .help("Time runs from older samples on the left to the latest recorded sample on the right. The fixed window is shared by all graphs and configurable in Settings. Pausing freezes the latest recorded sample.")
+            .help(store.isPaused
+                  ? "The graph is frozen. Times are relative to the paused reading at the right edge."
+                  : "Time runs from older readings on the left to now on the right. All graphs share the fixed time window chosen in Settings.")
     }
     private func metric(_ title: String, _ value: String, size: CGFloat = 24, help: String = "") -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(.system(size: 11)).foregroundStyle(.secondary); Text(value).font(.system(size: size, weight: .regular)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8) }.help(help)

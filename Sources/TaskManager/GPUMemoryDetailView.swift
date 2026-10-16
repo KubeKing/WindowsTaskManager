@@ -68,7 +68,7 @@ struct GPUMemoryDetailView: View {
                 HStack {
                     Text(store.graphWindow.axisLabel)
                     Spacer()
-                    Text("Latest sample")
+                    Text(store.isPaused ? "Paused" : "Now")
                 }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.leading, 40)
             }
 

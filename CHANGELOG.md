@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clarify graph time axes with Now while monitoring and Paused when frozen, including enlarged GPU memory.
+
 - Save CPU and GPU temperature graph visibility independently in Settings and chart context menus, preserving the previous shared choice during migration.
 
 - Add the saved Show temperature graph toggle to GPU utilization charts’ stable right-click menus; bottom temperature summaries remain visible.
