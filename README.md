@@ -6,7 +6,7 @@ A Swift system monitor with Windows Task Manager's familiar navigation and dense
 
 Requires an Apple silicon Mac on macOS 27 or later.
 
-Download **TaskManager-v1.2.0-macOS-arm64.zip** from [Releases](https://github.com/KubeKing/WindowsTaskManager/releases/latest), unzip it, and move **Task Manager.app** to Applications. The download is ad-hoc signed, not Developer ID signed or notarized; macOS Gatekeeper may block it. Building from source is also supported.
+Download **TaskManager-v1.2.1-macOS-arm64.dmg** from [Releases](https://github.com/KubeKing/WindowsTaskManager/releases/latest), open it, and drag **Task Manager.app** onto the **Applications** shortcut. Eject the disk image and launch the app from Applications. A ZIP download is also available. The app is ad-hoc signed, not Developer ID signed or notarized; macOS Gatekeeper may block it. Building from source is also supported.
 
 To build, install Apple's Swift command-line tools. There are no third-party packages to download.
 
@@ -17,7 +17,7 @@ open "build/Task Manager.app"
 
 The dark app icon is bundled artwork in `Resources/AppIcon-dark.png`; the build creates the macOS icon sizes locally. Image generation is only used while designing the icon.
 
-The build produces `build/Task Manager.app`, signed locally with an ad-hoc signature. Keep or move the app wherever you prefer; no installer, account, helper daemon, or network access is needed. `./scripts/package.sh` builds a release ZIP and SHA-256 checksum without local file metadata.
+The build produces `build/Task Manager.app`, signed locally with an ad-hoc signature. Keep or move the app wherever you prefer; no installer, account, helper daemon, or network access is needed. `./scripts/package.sh` builds a release DMG, ZIP and SHA-256 checksums. The read-only DMG contains the app and an Applications shortcut, without preferences, monitoring history or personal metadata.
 
 ## Use
 

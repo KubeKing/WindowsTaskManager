@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — 2026-10-16
+
+- Add a compressed, read-only DMG containing Task Manager.app and an Applications shortcut for drag-to-install distribution.
+- Keep the ZIP alternative and publish SHA-256 checksums for both downloads.
+- Update installation instructions. Signing remains ad-hoc; this packaging change does not add Developer ID signing, notarization, an installer service or a runtime dependency.
+
 ## 1.2.0 — 2026-10-16
 
 - Use a fixed configurable 30-second to 10-minute window across all Performance graphs; incoming samples scroll without compressing the timeline. Right endpoints read Now while monitoring and Paused when frozen.
