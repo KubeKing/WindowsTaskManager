@@ -55,9 +55,8 @@ final class MonitorStore: ObservableObject {
         graphWindow.save(defaults)
         history = GraphHistory.visible(graphBuffer, seconds: graphWindow.rawValue)
     } }
-    @Published var showTemperatures: Bool { didSet {
-        defaults.set(showTemperatures, forKey: "showTemperatures.v1")
-        refresh()
+    @Published var showTemperatureGraph: Bool { didSet {
+        defaults.set(showTemperatureGraph, forKey: "showTemperatures.v1")
     } }
     @Published private(set) var performanceVisibility: PerformanceVisibility
     @Published private(set) var gpuChartLayout: GPUChartLayout
@@ -103,7 +102,7 @@ final class MonitorStore: ObservableObject {
         performanceVisibility = PerformanceVisibility(defaults: defaults)
         gpuChartLayout = GPUChartLayout(defaults: defaults)
         graphWindow = GraphTimeWindow.load(defaults)
-        showTemperatures = defaults.bool(forKey: "showTemperatures.v1")
+        showTemperatureGraph = defaults.bool(forKey: "showTemperatures.v1")
         let initialPage = ManagerPage(rawValue: defaults.string(forKey: "defaultStartPage") ?? "") ?? .processes
         defaultStartPage = initialPage
         page = initialPage
@@ -191,9 +190,8 @@ final class MonitorStore: ObservableObject {
         guard !isCollecting else { return }
         isCollecting = true
         let context = samplingContext
-        let includeTemperatures = showTemperatures
         worker.async { [weak self] in
-            let value = autoreleasepool { context.sampler.sample(includeTemperatures: includeTemperatures) }
+            let value = autoreleasepool { context.sampler.sample(includeTemperatures: true) }
             DispatchQueue.main.async { self?.accept(value) }
         }
     }
@@ -204,6 +202,7 @@ final class MonitorStore: ObservableObject {
             var gap = HistoryPoint(snapshot: value)
             gap.timestamp = pauseGap; gap.cpu = nil; gap.memory = nil; gap.logicalCPU = []
             gap.totalMemoryBytes = nil; gap.systemUsedMemoryBytes = nil
+            gap.temperatures = TemperatureMetrics()
             gap.kernelCPU = nil; gap.logicalKernel = []; gap.networkByID = [:]; gap.diskByID = [:]; gap.gpuByID = [:]
             gap.diskRead = nil; gap.diskWrite = nil; gap.networkReceived = nil; gap.networkSent = nil
             graphBuffer.append(gap); self.pauseGap = nil

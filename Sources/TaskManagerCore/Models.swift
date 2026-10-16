@@ -153,12 +153,14 @@ public struct HistoryPoint: Identifiable, Sendable {
     public var networkByID: [String: NetworkMetrics]
     public var diskByID: [String: DiskMetrics]
     public var gpuByID: [String: GPUMetrics]
+    public var temperatures: TemperatureMetrics
     public var diskRead: Double?
     public var diskWrite: Double?
     public init(snapshot: SystemSnapshot) {
         timestamp = snapshot.timestamp; cpu = snapshot.cpuUsage; memory = snapshot.memory.usedPercent
         totalMemoryBytes = snapshot.memory.totalBytes > 0 ? snapshot.memory.totalBytes : nil
         systemUsedMemoryBytes = snapshot.memory.usageAvailable ? snapshot.memory.usedBytes : nil
+        temperatures = snapshot.temperatures
         logicalCPU = snapshot.logicalCPUUsage
         kernelCPU = snapshot.cpuKernelUsage
         logicalKernel = snapshot.logicalKernelUsage

@@ -393,8 +393,8 @@ struct SettingsPage: View {
                     settingRow("Graph time window", detail: "One fixed time scale for all Performance graphs, including logical CPUs and GPU memory", symbol: "clock") {
                         StablePicker(title: "Graph time window", selection: $store.graphWindow, choices: GraphTimeWindow.allCases.map { ($0.label, $0) }).frame(width: 175)
                     }
-                    settingRow("CPU and GPU temperatures", detail: "Experimental sensor averages in °C; verified individual cores only. No polling while off.", symbol: "thermometer") {
-                        Toggle("Show temperatures", isOn: $store.showTemperatures).toggleStyle(.checkbox)
+                    settingRow("Temperature graph", detail: "Overlay °C history on CPU/GPU activity charts. Summary temperatures are always shown.", symbol: "thermometer") {
+                        Toggle("Show temperature graph", isOn: $store.showTemperatureGraph).toggleStyle(.checkbox)
                     }
                     VStack(spacing: 0) {
                         disclosureHeader("Window management", detail: "Specify default Task Manager window behavior", symbol: "macwindow.on.rectangle", expanded: $windowOptionsExpanded)

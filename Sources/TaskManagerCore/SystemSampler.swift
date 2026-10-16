@@ -86,6 +86,8 @@ public final class SystemSampler {
             if result.gpus.count != 1 || !result.gpus[0].name.hasPrefix("Apple") {
                 result.temperatures.gpuAverageCelsius = nil
                 result.temperatures.gpuSensorCount = 0
+            } else {
+                result.temperatures.gpuID = result.gpus[0].id
             }
         } else { temperatureSampler = nil }
         var load = [Double](repeating: 0, count: 3)

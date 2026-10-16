@@ -7,11 +7,29 @@ public struct TemperatureMetrics: Sendable {
     public var gpuAverageCelsius: Double? = nil
     public var cpuSensorCount = 0
     public var gpuSensorCount = 0
+    public var gpuID: String? = nil
     // Thermal zone enumeration is never a mapping to OS logical core IDs.
     public var logicalCoreCelsius: [Int: Double] = [:]
     public var sampledAt: Date? = nil
     public var note = "Experimental average of readable Apple silicon CPU/GPU die sensors; individual-core mapping is unavailable."
     public init() {}
+}
+
+/// Historical temperature series are bound to the same sample and device as utilization.
+public enum TemperatureSeries {
+    case cpuAverage
+    case logicalCore(Int)
+    case gpu(String)
+
+    public func value(in point: HistoryPoint) -> Double? {
+        let value: Double?
+        switch self {
+        case .cpuAverage: value = point.temperatures.cpuAverageCelsius
+        case .logicalCore(let index): value = point.temperatures.logicalCoreCelsius[index]
+        case .gpu(let id): value = point.temperatures.gpuID == id ? point.temperatures.gpuAverageCelsius : nil
+        }
+        return value.flatMap { TemperatureCodec.valid($0) ? $0 : nil }
+    }
 }
 
 enum TemperatureCodec {
@@ -102,7 +120,7 @@ private final class SMCTemperatureReader: TemperatureSource {
     }
 }
 
-/// Created only when enabled. Reads cached discovered keys at most every two
+/// Reads cached discovered keys at most every two
 /// seconds; unavailable connections retry once per minute, not every UI tick.
 final class TemperatureSampler {
     private var reader: TemperatureSource?

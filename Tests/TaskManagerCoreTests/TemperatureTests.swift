@@ -41,4 +41,39 @@ struct TemperatureTests {
         #expect(TemperatureCodec.component("TB0T") == nil)
         #expect(TemperatureCodec.component("Tp012") == nil)
     }
+    @Test func historyPreservesTemperatureAtEachSampleWithoutAVisibilitySetting() {
+        var snapshot = SystemSnapshot()
+        snapshot.temperatures.cpuAverageCelsius = 42
+        let first = HistoryPoint(snapshot: snapshot)
+        snapshot.temperatures.cpuAverageCelsius = 58
+        snapshot.timestamp = snapshot.timestamp.addingTimeInterval(2)
+        let second = HistoryPoint(snapshot: snapshot)
+        #expect([first, second].map { TemperatureSeries.cpuAverage.value(in: $0) } == [42, 58])
+        #expect(first.temperatures.cpuAverageCelsius == 42)
+        #expect(second.timestamp.timeIntervalSince(first.timestamp) == 2)
+    }
+
+    @Test func historicalGPUReadingsStayBoundToTheirDevice() {
+        var snapshot = SystemSnapshot()
+        snapshot.temperatures.gpuAverageCelsius = 51
+        snapshot.temperatures.gpuID = "integrated"
+        let point = HistoryPoint(snapshot: snapshot)
+        #expect(TemperatureSeries.gpu("integrated").value(in: point) == 51)
+        #expect(TemperatureSeries.gpu("external").value(in: point) == nil)
+        snapshot.temperatures.gpuID = nil
+        #expect(TemperatureSeries.gpu("integrated").value(in: HistoryPoint(snapshot: snapshot)) == nil)
+    }
+
+    @Test func logicalHistoryNeverFallsBackToTheAverageAndMissingReadingsBreakTheLine() {
+        var snapshot = SystemSnapshot()
+        snapshot.temperatures.cpuAverageCelsius = 55
+        #expect(TemperatureSeries.logicalCore(0).value(in: HistoryPoint(snapshot: snapshot)) == nil)
+        snapshot.temperatures.logicalCoreCelsius[0] = 49
+        #expect(TemperatureSeries.logicalCore(0).value(in: HistoryPoint(snapshot: snapshot)) == 49)
+        snapshot.temperatures = TemperatureMetrics()
+        #expect(TemperatureSeries.cpuAverage.value(in: HistoryPoint(snapshot: snapshot)) == nil)
+        snapshot.temperatures.cpuAverageCelsius = .nan
+        #expect(TemperatureSeries.cpuAverage.value(in: HistoryPoint(snapshot: snapshot)) == nil)
+    }
+
 }
