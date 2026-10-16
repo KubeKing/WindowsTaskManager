@@ -118,7 +118,7 @@ struct PerformanceView: View {
     }
     private func temperatureHistory(_ series: TemperatureSeries) -> [ResourcePlotOverlay] {
         guard store.showTemperatureGraph else { return [] }
-        return [ResourcePlotOverlay(values: store.history.map { series.value(in: $0) }, color: .green, dash: [5, 3], maximum: TemperatureScale.maximum, minimum: TemperatureScale.minimum, sampleColors: store.history.map { temperatureColor(TemperatureBand.classify(series.value(in: $0), pressure: $0.temperatures.thermalPressure)) })]
+        return [ResourcePlotOverlay(values: store.history.map { series.value(in: $0) }, color: .green, dash: [5, 3], maximum: TemperatureScale.maximum, minimum: TemperatureScale.minimum, temperatureBands: true)]
     }
     private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
     private func diskSummary(_ disk: DiskMetrics) -> String {
@@ -402,7 +402,7 @@ struct ResourcePlotOverlay {
     var dash: [CGFloat] = []
     var maximum: Double? = nil
     var minimum: Double = 0
-    var sampleColors: [Color] = []
+    var temperatureBands = false
 }
 
 struct ResourcePlot: View {
@@ -432,8 +432,9 @@ struct ResourcePlot: View {
             }
             if temperatureAxis {
                 size.width = max(1, size.width - 44)
+                let inset = min(1.5, size.height / 2)
                 for tick in TemperatureScale.ticks {
-                    let y = size.height * (1 - (TemperatureScale.position(tick) ?? 0))
+                    let y = inset + (size.height - 2 * inset) * (1 - (TemperatureScale.position(tick) ?? 0))
                     var mark = Path(); mark.move(to: CGPoint(x: size.width, y: y)); mark.addLine(to: CGPoint(x: size.width + 5, y: y))
                     context.stroke(mark, with: .color(.secondary), lineWidth: 0.5)
                     let label = Text("\(Int(tick)) °C").font(.system(size: 9)).monospacedDigit().foregroundColor(.secondary)
@@ -446,47 +447,44 @@ struct ResourcePlot: View {
             var grid = Path()
             for i in 1..<10 { let x = rect.minX + rect.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: rect.minY)); grid.addLine(to: CGPoint(x: x, y: rect.maxY)) }
             let divisions = temperatureAxis ? 4 : 5
-            for i in 1..<divisions { let y = rect.minY + rect.height * Double(i) / Double(divisions); grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y)) }
+            for i in 1..<divisions {
+                let inset = temperatureAxis ? min(1.5, size.height / 2) : rect.minY
+                let y = inset + (size.height - 2 * inset) * Double(i) / Double(divisions)
+                grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y))
+            }
             context.stroke(grid, with: .color(color.opacity(compact ? 0.12 : scheme == .dark ? 0.24 : 0.18)), lineWidth: 0.5)
             context.clip(to: Path(CGRect(origin: .zero, size: size)))
             draw(values, size: size, context: &context, dashed: false)
             if !secondValues.isEmpty { draw(secondValues, size: size, context: &context, dashed: true) }
             for overlay in overlays {
-                draw(overlay.values, size: size, context: &context, dashed: true, lineColor: overlay.color, lineDash: overlay.dash, scaleMaximum: overlay.maximum, scaleMinimum: overlay.minimum, sampleColors: overlay.sampleColors)
+                draw(overlay.values, size: size, context: &context, dashed: true, lineColor: overlay.color, lineDash: overlay.dash, scaleMaximum: overlay.maximum, scaleMinimum: overlay.minimum, temperatureBands: overlay.temperatureBands)
             }
             context.stroke(Path(rect), with: .color(color.opacity(scheme == .dark ? 0.7 : 0.5)), lineWidth: 1)
         }
     }
-    private func draw(_ values: [Double?], size: CGSize, context: inout GraphicsContext, dashed: Bool, lineColor: Color? = nil, lineDash: [CGFloat]? = nil, scaleMaximum: Double? = nil, scaleMinimum: Double = 0, sampleColors: [Color] = []) {
+    private func draw(_ values: [Double?], size: CGSize, context: inout GraphicsContext, dashed: Bool, lineColor: Color? = nil, lineDash: [CGFloat]? = nil, scaleMaximum: Double? = nil, scaleMinimum: Double = 0, temperatureBands: Bool = false) {
         guard values.count > 1 else { return }
         let capacity = max(values.count, compact ? 30 : 60)
         let timed = dates.count == values.count
         let timeline = GraphTimeline(end: dates.last ?? Date(timeIntervalSince1970: 0), window: graphWindow)
-        var segments: [(points: [CGPoint], color: Color?)] = []
+        var segments: [[CGPoint]] = []
         var segment: [CGPoint] = []
-        var segmentColor: Color? = nil
+        let inset = scaleMaximum == nil ? 0 : min(1.5, size.height / 2)
         for (index, value) in values.enumerated() {
             let gap = timed && index > 0 && dates[index].timeIntervalSince(dates[index - 1]) > 6
             if gap || value == nil || value?.isFinite == false {
-                if !segment.isEmpty { segments.append((segment, segmentColor)); segment.removeAll(keepingCapacity: true) }
+                if !segment.isEmpty { segments.append(segment); segment.removeAll(keepingCapacity: true) }
             }
             guard let value, value.isFinite else { continue }
             let fraction = timed ? timeline.position(dates[index]) : Double(capacity - values.count + index) / Double(capacity - 1)
             guard let fraction else { continue }
             let x = size.width * fraction
             // Keep independent-axis overlay strokes visible at both bounds.
-            let inset = scaleMaximum == nil ? 0 : min(1.5, size.height / 2)
             let y = inset + (size.height - 2 * inset) * (1 - min(1, max(0, (value - scaleMinimum) / max(1, (scaleMaximum ?? maximum) - scaleMinimum))))
-            let sampleColor = sampleColors.indices.contains(index) ? sampleColors[index] : lineColor
-            if !segment.isEmpty, sampleColor != segmentColor, let previous = segment.last {
-                segments.append((segment, segmentColor)); segment = [previous]
-            }
-            segmentColor = sampleColor
             segment.append(CGPoint(x: x, y: y))
         }
-        if !segment.isEmpty { segments.append((segment, segmentColor)) }
-        for segment in segments {
-            let points = segment.points
+        if !segment.isEmpty { segments.append(segment) }
+        for points in segments {
             guard points.count > 1, let first = points.first, let last = points.last else { continue }
             var line = Path(); line.move(to: first)
             points.dropFirst().forEach { line.addLine(to: $0) }
@@ -494,7 +492,31 @@ struct ResourcePlot: View {
                 var fill = line; fill.addLine(to: CGPoint(x: last.x, y: size.height)); fill.addLine(to: CGPoint(x: first.x, y: size.height)); fill.closeSubpath()
                 context.fill(fill, with: .linearGradient(Gradient(colors: [color.opacity(0.22), color.opacity(0.025)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
             }
-            context.stroke(line, with: .color((segment.color ?? color).opacity(segment.color != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : logical ? 1.2 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
+            let shading: GraphicsContext.Shading
+            let lineWidth: CGFloat = compact ? 1 : logical ? 1.2 : 1.6
+            if temperatureBands {
+                // Hard stops color the visible stroke at the exact threshold,
+                // including between samples. Stroke once to preserve dash phase.
+                let warm = TemperatureScale.position(60) ?? 0.5
+                let hot = TemperatureScale.position(80) ?? 0.75
+                // Include the full stroke at the ceiling: 100+ readings clamp
+                // here and must remain visibly purple, rather than half red.
+                let ceiling = max(hot, 1 - (lineWidth / 2 + 0.25) / max(1, size.height - 2 * inset))
+                let gradient = Gradient(stops: [
+                    .init(color: .green.opacity(0.95), location: 0),
+                    .init(color: .green.opacity(0.95), location: warm),
+                    .init(color: .yellow.opacity(0.95), location: warm),
+                    .init(color: .yellow.opacity(0.95), location: hot),
+                    .init(color: .red.opacity(0.95), location: hot),
+                    .init(color: .red.opacity(0.95), location: ceiling),
+                    .init(color: .purple.opacity(0.95), location: ceiling),
+                    .init(color: .purple.opacity(0.95), location: 1)
+                ])
+                shading = .linearGradient(gradient, startPoint: CGPoint(x: 0, y: size.height - inset), endPoint: CGPoint(x: 0, y: inset))
+            } else {
+                shading = .color((lineColor ?? color).opacity(lineColor != nil ? 0.95 : dashed ? 0.55 : 0.9))
+            }
+            context.stroke(line, with: shading, style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
         }
     }
 }

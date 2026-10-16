@@ -370,7 +370,7 @@ struct SettingsPage: View {
     @ViewState private var availabilityExpanded = false
     private var mac: Bool { store.appearance == .macOS }
     private var temperatureGuide: String {
-        "Temperature colors: Green · Safe below 60 °C; Yellow · Warm 60–<80 °C; Red · Hot 80–<100 °C; Purple · Throttling risk at 100 °C or above. Purple also indicates macOS serious/critical thermal pressure, which affects system performance. These are display bands, not Apple hardware limits. Graphs span 20–100 °C; values outside this range reach the chart edge while the badge retains the actual reading."
+        "Temperature graph colors follow the stroke's height: Green · Safe below 60 °C; Yellow · Warm 60–<80 °C; Red · Hot 80–<100 °C; Purple · Throttling risk at 100 °C or above. Colors change at the threshold even between samples. The temperature badge can separately report macOS serious/critical thermal pressure. These are display bands, not Apple hardware limits. Graphs span 20–100 °C; values outside this range reach the chart edge while the badge retains the actual reading."
     }
     var body: some View {
         ScrollView {
