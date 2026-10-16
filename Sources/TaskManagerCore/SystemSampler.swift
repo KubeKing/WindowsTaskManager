@@ -21,6 +21,7 @@ public final class SystemSampler {
     }()
     private let gpuSampler = GPUSampler()
     private let frequencySampler = CPUFrequencySampler()
+    private var temperatureSampler: TemperatureSampler?
     private let processNetworkSampler = ProcessNetworkSampler()
     private let processorCount = ProcessInfo.processInfo.activeProcessorCount
     private let processorName: String
@@ -56,7 +57,7 @@ public final class SystemSampler {
         return ProcessIdentity(pid: pid, startTime: info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
     }
 
-    public func sample() -> SystemSnapshot {
+    public func sample(includeTemperatures: Bool = false) -> SystemSnapshot {
         let started = ProcessInfo.processInfo.systemUptime
         let elapsed = previousTime.map { started - $0 } ?? 0
         var result = SystemSnapshot()
@@ -77,6 +78,16 @@ public final class SystemSampler {
         result.networks = networkMetrics(elapsed: elapsed)
         result.disks = diskMetrics(now: started, elapsed: elapsed)
         result.gpus = gpuSampler.sample()
+        if includeTemperatures {
+            if temperatureSampler == nil { temperatureSampler = TemperatureSampler() }
+            result.temperatures = temperatureSampler!.sample(now: started)
+            // SMC zones describe the integrated Apple GPU, never an arbitrary
+            // adapter. Without a unique association keep that device unavailable.
+            if result.gpus.count != 1 || !result.gpus[0].name.hasPrefix("Apple") {
+                result.temperatures.gpuAverageCelsius = nil
+                result.temperatures.gpuSensorCount = 0
+            }
+        } else { temperatureSampler = nil }
         var load = [Double](repeating: 0, count: 3)
         if getloadavg(&load, 3) == 3 { result.loadAverage = load }
         if result.processes.contains(where: { $0.memoryBytes == nil || $0.totalCPUSeconds == nil }) {

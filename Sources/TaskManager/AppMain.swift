@@ -8,9 +8,10 @@ enum AppMain {
         // An optional diagnostic run samples real local data without creating a UI.
         if CommandLine.arguments.contains("--sample") {
             let sampler = SystemSampler()
-            _ = sampler.sample(); Thread.sleep(forTimeInterval: 1)
-            _ = sampler.sample(); Thread.sleep(forTimeInterval: 1)
-            let value = sampler.sample()
+            let temperatures = CommandLine.arguments.contains("--temperatures")
+            _ = sampler.sample(includeTemperatures: temperatures); Thread.sleep(forTimeInterval: 1)
+            _ = sampler.sample(includeTemperatures: temperatures); Thread.sleep(forTimeInterval: 1)
+            let value = sampler.sample(includeTemperatures: temperatures)
             print("Processes: \(value.processes.count), CPU: \(value.cpuUsage.map { String(format: "%.2f%%", $0) } ?? "unavailable"), memory: \(value.memory.usedBytes)/\(value.memory.totalBytes), sampler: \(String(format: "%.2f ms", value.collectionDuration * 1000))")
             print("Per-process network: \(value.processes.filter { $0.networkBytesPerSecond != nil }.count) attributed processes, \(MetricFormat.rate(value.processes.compactMap(\.networkBytesPerSecond).reduce(0, +))) observed TCP/UDP")
             print("CPU: \(value.cpuName), cores: \(value.logicalCPUCount), interfaces: \(value.networks.map(\.name)), disks: \(value.disks.map(\.mountPath))")
@@ -18,6 +19,10 @@ enum AppMain {
             for disk in value.disks { print("Storage: \(disk.name) · \(disk.bsdName ?? "unknown") · \(disk.kind.rawValue) · capacity=\(disk.totalBytes) · volumes=\(disk.volumes.count) · used=\(disk.primaryVolume?.usedBytes.description ?? "unavailable")") }
             for gpu in value.gpus {
                 print("GPU: \(gpu.name), utilization: \(MetricFormat.percent(gpu.utilization)), renderer: \(MetricFormat.percent(gpu.rendererUtilization)), tiler: \(MetricFormat.percent(gpu.tilerUtilization)), memory in use: \(MetricFormat.bytes(gpu.memoryInUseBytes)), allocated: \(MetricFormat.bytes(gpu.memoryAllocatedBytes))")
+            }
+            if temperatures {
+                let t = value.temperatures
+                print("Temperature sensor averages: CPU=\(t.cpuAverageCelsius.map { String(format: "%.1f C", $0) } ?? "unavailable") (\(t.cpuSensorCount) sensors), GPU=\(t.gpuAverageCelsius.map { String(format: "%.1f C", $0) } ?? "unavailable") (\(t.gpuSensorCount) sensors); verified per-core mappings=\(t.logicalCoreCelsius.count)")
             }
             value.warnings.forEach { print("Note: \($0)") }
             return

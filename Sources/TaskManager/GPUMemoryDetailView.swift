@@ -66,9 +66,9 @@ struct GPUMemoryDetailView: View {
                         .accessibilityValue("GPU used \(MetricFormat.bytes(current.gpuUsedBytes))")
                 }
                 HStack {
-                    Text("\(Int(max(60, (store.history.last?.timestamp ?? Date()).timeIntervalSince(store.history.first?.timestamp ?? Date())))) seconds")
+                    Text(store.graphWindow.axisLabel)
                     Spacer()
-                    Text("0")
+                    Text("Latest sample")
                 }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.leading, 40)
             }
 

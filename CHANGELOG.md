@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Use a fixed configurable 30-second to 10-minute time window across every Performance graph; new samples scroll without compressing history.
+- Add saved optional native CPU/GPU temperature averages and chart badges, with unavailable per-core values rather than guessed mappings; no admin helper, external dependency or polling while disabled.
+
 ## 1.1.0 — 2026-10-14
 
 - Choose each GPU chart metric independently through stable native dropdowns, with choices retained across updates and unavailable engine metrics labelled explicitly.

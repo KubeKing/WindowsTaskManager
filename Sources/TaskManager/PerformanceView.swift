@@ -1,6 +1,16 @@
 import SwiftUI
 import TaskManagerCore
 
+private struct GraphTimeWindowKey: EnvironmentKey {
+    static let defaultValue: GraphTimeWindow = .oneMinute
+}
+extension EnvironmentValues {
+    var graphTimeWindow: GraphTimeWindow {
+        get { self[GraphTimeWindowKey.self] }
+        set { self[GraphTimeWindowKey.self] = newValue }
+    }
+}
+
 struct PerformanceView: View {
     @ObservedObject var store: MonitorStore
     @ViewState private var isGPUMemoryExpanded = false
@@ -68,6 +78,7 @@ struct PerformanceView: View {
             }.id(selection)
             }
         }.onChange(of: selection) { isGPUMemoryExpanded = false }
+        .environment(\.graphTimeWindow, store.graphWindow)
     }
     private var title: String {
         if selection == "memory" { return "Memory" }
@@ -85,6 +96,14 @@ struct PerformanceView: View {
     private var memorySummary: String {
         let m = store.snapshot.memory
         return "\(MetricFormat.bytes(m.usageAvailable ? m.usedBytes : nil))/\(MetricFormat.bytes(m.totalBytes)) (\(MetricFormat.percent(m.usedPercent)))"
+    }
+    private func temperature(_ celsius: Double?) -> String { celsius.map { String(format: "%.1f °C", $0) } ?? "—" }
+    private func temperatureOverlay(_ value: Double?, label: String = "Sensor avg") -> some View {
+        Text(label + " " + temperature(value)).font(.system(size: 10)).monospacedDigit()
+            .padding(.horizontal, 5).padding(.vertical, 3)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
+            .padding(5).allowsHitTesting(false)
+            .help(store.snapshot.temperatures.note)
     }
     private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
     private func diskSummary(_ disk: DiskMetrics) -> String {
@@ -128,14 +147,24 @@ struct PerformanceView: View {
                     ForEach(0..<count, id: \.self) { index in
                         ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil)
                         .frame(height: (height - CGFloat(rows - 1) * 8) / CGFloat(rows))
+                        .overlay(alignment: .topTrailing) {
+                            if store.showTemperatures {
+                                temperatureOverlay(store.snapshot.temperatures.logicalCoreCelsius[index], label: "Temp")
+                                    .padding(.top, 16)
+                            }
+                        }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Logical processor \(index + 1), \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core, \(MetricFormat.percent(store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil))")
+                        .accessibilityValue(store.showTemperatures ? "Temperature " + (store.snapshot.temperatures.logicalCoreCelsius[index].map { temperature($0) } ?? "unavailable") : "")
                         .help("Logical processor \(index + 1) · \(hardware.logicalCoreKinds[index]?.name ?? "Unknown type") core · 0–100% utilization")
                     }
                 }
             } else {
                 axis("% Utilization", maximum: "100%")
                 ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue).frame(height: height)
+                    .overlay(alignment: .topTrailing) {
+                        if store.showTemperatures { temperatureOverlay(store.snapshot.temperatures.cpuAverageCelsius, label: "CPU sensor avg") }
+                    }
             }
             timeAxis
         }.overlay(StableContextMenu {
@@ -144,16 +173,25 @@ struct PerformanceView: View {
                     .action("Overall utilization", checked: !store.cpuGraphLogical) { store.cpuGraphLogical = false },
                     .action("Logical processors", checked: store.cpuGraphLogical) { store.cpuGraphLogical = true }
                 ]),
-                .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() }
+                .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() },
+                .action("Show temperatures", checked: store.showTemperatures) { store.showTemperatures.toggle() }
             ]
         })
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
         layout {
             VStack(alignment: .leading, spacing: 15) {
-                HStack(spacing: 24) {
-                    metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage))
-                    metric("Speed · P cores", frequency(store.snapshot.cpuFrequency.performanceMHz), size: 21, help: store.snapshot.cpuFrequency.note)
-                    metric("Speed · E cores", frequency(store.snapshot.cpuFrequency.efficiencyMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                let metricsLayout = width < 700 && store.showTemperatures ? AnyLayout(VStackLayout(alignment: .leading, spacing: 15)) : AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+                metricsLayout {
+                    HStack(spacing: 24) {
+                        metric("Utilization", MetricFormat.percent(store.snapshot.cpuUsage))
+                        if store.showTemperatures {
+                            metric("Temperature · sensor avg", temperature(store.snapshot.temperatures.cpuAverageCelsius), size: 21, help: store.snapshot.temperatures.note)
+                        }
+                    }
+                    HStack(spacing: 24) {
+                        metric("Speed · P cores", frequency(store.snapshot.cpuFrequency.performanceMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                        metric("Speed · E cores", frequency(store.snapshot.cpuFrequency.efficiencyMHz), size: 21, help: store.snapshot.cpuFrequency.note)
+                    }
                 }
                 HStack(spacing: 22) {
                     metric("Processes", String(store.snapshot.processes.count), size: 18)
@@ -174,6 +212,9 @@ struct PerformanceView: View {
                 pair("L3 cache:", MetricFormat.bytes(hardware.l3Bytes))
             }.frame(minWidth: 200)
         }.padding(.top, 4)
+        if store.showTemperatures {
+            note("CPU temperature averages readable die sensors, not individual cores. Unverified per-core temperatures remain unavailable (—). Sensors refresh at most every two seconds.")
+        }
         note("Experimental CPU frequency · Active-time averages for performance and efficiency clusters; idle time is excluded.")
     }
     @ViewBuilder private func memoryContent(height: CGFloat, width: CGFloat) -> some View {
@@ -268,8 +309,11 @@ struct PerformanceView: View {
             timeAxis
         }
         graph("GPU memory allocated", maximumLabel: MetricFormat.bytes(memoryScale), values: gpuMemoryValues(id, allocated: true), maximum: Double(memoryScale), height: 35)
-        HStack(alignment: .top, spacing: 30) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), alignment: .leading)], alignment: .leading, spacing: 15) {
             metric("Utilization", MetricFormat.percent(gpu?.utilization))
+            if store.showTemperatures {
+                metric("Temperature · sensor avg", temperature(store.snapshot.temperatures.gpuAverageCelsius), size: 21, help: store.snapshot.temperatures.note)
+            }
             metric("GPU memory in use", MetricFormat.bytes(gpu?.memoryInUseBytes), size: 21)
             metric("GPU memory allocated", MetricFormat.bytes(gpu?.memoryAllocatedBytes), size: 21)
         }
@@ -298,6 +342,11 @@ struct PerformanceView: View {
                         Text("Unavailable").font(.system(size: 12)).foregroundStyle(.secondary)
                     }
                 }
+                .overlay(alignment: .topTrailing) {
+                    if store.showTemperatures && metric == .utilization {
+                        temperatureOverlay(store.snapshot.temperatures.gpuAverageCelsius, label: "GPU sensor avg")
+                    }
+                }
                 .help(metric.value(in: gpu) == nil ? metric.unavailableReason : metric.title)
                 .accessibilityLabel("GPU chart \(slot + 1): \(metric.title)")
             timeAxis
@@ -317,11 +366,9 @@ struct PerformanceView: View {
     }
     private func axis(_ label: String, maximum: String) -> some View { HStack { Text(label); Spacer(); Text(maximum) }.font(.system(size: 11)).foregroundStyle(.secondary) }
     private var timeAxis: some View {
-        let seconds = Int(max(60, (dates.last ?? Date()).timeIntervalSince(dates.first ?? Date())))
-        let span = seconds < 60 ? "\(seconds)s" : seconds % 60 == 0 ? "\(seconds / 60)m" : "\(seconds / 60)m \(seconds % 60)s"
-        return HStack { Text(span + " ago"); Spacer(); Text("Latest sample") }
+        return HStack { Text(store.graphWindow.axisLabel); Spacer(); Text("Latest sample") }
             .font(.system(size: 10)).foregroundStyle(.secondary)
-            .help("Time runs from older samples on the left to the latest recorded sample on the right. The graph shows at least one minute; its span depends on sampling speed and pauses.")
+            .help("Time runs from older samples on the left to the latest recorded sample on the right. The fixed window is shared by all graphs and configurable in Settings. Pausing freezes the latest recorded sample.")
     }
     private func metric(_ title: String, _ value: String, size: CGFloat = 24, help: String = "") -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(.system(size: 11)).foregroundStyle(.secondary); Text(value).font(.system(size: size, weight: .regular)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8) }.help(help)
@@ -360,6 +407,7 @@ struct ResourcePlot: View {
     var currentUsage: Double? = nil
     var overlays: [ResourcePlotOverlay] = []
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.graphTimeWindow) private var graphWindow
     var body: some View {
         Canvas { context, canvasSize in
             var size = canvasSize
@@ -378,6 +426,7 @@ struct ResourcePlot: View {
             for i in 1..<10 { let x = rect.minX + rect.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: rect.minY)); grid.addLine(to: CGPoint(x: x, y: rect.maxY)) }
             for i in 1..<5 { let y = rect.minY + rect.height * Double(i) / 5; grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y)) }
             context.stroke(grid, with: .color(color.opacity(compact ? 0.12 : scheme == .dark ? 0.24 : 0.18)), lineWidth: 0.5)
+            context.clip(to: Path(CGRect(origin: .zero, size: size)))
             draw(values, size: size, context: &context, dashed: false)
             if !secondValues.isEmpty { draw(secondValues, size: size, context: &context, dashed: true) }
             for overlay in overlays {
@@ -390,8 +439,7 @@ struct ResourcePlot: View {
         guard values.count > 1 else { return }
         let capacity = max(values.count, compact ? 30 : 60)
         let timed = dates.count == values.count
-        let end = dates.last?.timeIntervalSince1970 ?? 0
-        let duration = timed ? max(60, end - (dates.first?.timeIntervalSince1970 ?? end)) : 1
+        let timeline = GraphTimeline(end: dates.last ?? Date(timeIntervalSince1970: 0), window: graphWindow)
         var segments: [[CGPoint]] = []
         var segment: [CGPoint] = []
         for (index, value) in values.enumerated() {
@@ -400,7 +448,9 @@ struct ResourcePlot: View {
                 if !segment.isEmpty { segments.append(segment); segment.removeAll(keepingCapacity: true) }
             }
             guard let value, value.isFinite else { continue }
-            let x = timed ? size.width * (1 - (end - dates[index].timeIntervalSince1970) / duration) : size.width * Double(capacity - values.count + index) / Double(capacity - 1)
+            let fraction = timed ? timeline.position(dates[index]) : Double(capacity - values.count + index) / Double(capacity - 1)
+            guard let fraction else { continue }
+            let x = size.width * fraction
             let y = size.height * (1 - min(1, max(0, value / max(1, maximum))))
             segment.append(CGPoint(x: x, y: y))
         }

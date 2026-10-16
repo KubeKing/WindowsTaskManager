@@ -51,6 +51,14 @@ final class MonitorStore: ObservableObject {
     @Published var performanceSelection = "cpu"
     @Published var cpuGraphLogical = false
     @Published var showKernelTimes = false
+    @Published var graphWindow: GraphTimeWindow { didSet {
+        graphWindow.save(defaults)
+        history = GraphHistory.visible(graphBuffer, seconds: graphWindow.rawValue)
+    } }
+    @Published var showTemperatures: Bool { didSet {
+        defaults.set(showTemperatures, forKey: "showTemperatures.v1")
+        refresh()
+    } }
     @Published private(set) var performanceVisibility: PerformanceVisibility
     @Published private(set) var gpuChartLayout: GPUChartLayout
     @Published var appearance: AppAppearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
@@ -94,6 +102,8 @@ final class MonitorStore: ObservableObject {
         self.defaults = defaults
         performanceVisibility = PerformanceVisibility(defaults: defaults)
         gpuChartLayout = GPUChartLayout(defaults: defaults)
+        graphWindow = GraphTimeWindow.load(defaults)
+        showTemperatures = defaults.bool(forKey: "showTemperatures.v1")
         let initialPage = ManagerPage(rawValue: defaults.string(forKey: "defaultStartPage") ?? "") ?? .processes
         defaultStartPage = initialPage
         page = initialPage
@@ -181,8 +191,9 @@ final class MonitorStore: ObservableObject {
         guard !isCollecting else { return }
         isCollecting = true
         let context = samplingContext
+        let includeTemperatures = showTemperatures
         worker.async { [weak self] in
-            let value = autoreleasepool { context.sampler.sample() }
+            let value = autoreleasepool { context.sampler.sample(includeTemperatures: includeTemperatures) }
             DispatchQueue.main.async { self?.accept(value) }
         }
     }
@@ -198,7 +209,7 @@ final class MonitorStore: ObservableObject {
             graphBuffer.append(gap); self.pauseGap = nil
         }
         graphBuffer.append(HistoryPoint(snapshot: value))
-        if graphBuffer.count > 120 { graphBuffer.removeFirst(graphBuffer.count - 120) }
+        graphBuffer = GraphHistory.retained(graphBuffer)
         if Date().timeIntervalSince(lastHistoryMaintenance) >= 60 { maintainHistory() }
         if historyEnabled && !isPaused {
             localHistory.record(snapshot: value)
@@ -221,7 +232,7 @@ final class MonitorStore: ObservableObject {
 
     private func publish(_ value: SystemSnapshot) {
         snapshot = value
-        history = graphBuffer
+        history = GraphHistory.visible(graphBuffer, seconds: graphWindow.rawValue)
         reconcilePerformanceSelection()
         if historyEnabled { historyRecords = localHistory.records }
         if let selection, !value.processes.contains(where: { $0.id == selection }) { self.selection = nil }

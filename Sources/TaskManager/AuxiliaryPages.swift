@@ -390,6 +390,12 @@ struct SettingsPage: View {
                             else { store.setInterval(value); if store.isPaused { store.togglePause() } }
                         }), choices: [("High · 0.5 seconds", 0.5), ("Normal · 1 second", 1.0), ("Low · 2 seconds", 2.0), ("Very low · 5 seconds", 5.0), ("Paused", 0.0)]).frame(width: 175)
                     }
+                    settingRow("Graph time window", detail: "One fixed time scale for all Performance graphs, including logical CPUs and GPU memory", symbol: "clock") {
+                        StablePicker(title: "Graph time window", selection: $store.graphWindow, choices: GraphTimeWindow.allCases.map { ($0.label, $0) }).frame(width: 175)
+                    }
+                    settingRow("CPU and GPU temperatures", detail: "Experimental sensor averages in °C; verified individual cores only. No polling while off.", symbol: "thermometer") {
+                        Toggle("Show temperatures", isOn: $store.showTemperatures).toggleStyle(.checkbox)
+                    }
                     VStack(spacing: 0) {
                         disclosureHeader("Window management", detail: "Specify default Task Manager window behavior", symbol: "macwindow.on.rectangle", expanded: $windowOptionsExpanded)
                         if windowOptionsExpanded {

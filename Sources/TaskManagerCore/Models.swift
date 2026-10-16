@@ -119,6 +119,7 @@ public struct SystemSnapshot: Sendable {
     public var monotonicTime: Double = 0
     public var processes: [ProcessRecord] = []
     public var cpuFrequency = CPUFrequencyMetrics()
+    public var temperatures = TemperatureMetrics()
     public var cpuUsage: Double? = nil
     public var logicalCPUUsage: [Double] = []
     public var cpuKernelUsage: Double? = nil
