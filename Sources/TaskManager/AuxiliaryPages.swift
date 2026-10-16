@@ -396,9 +396,12 @@ struct SettingsPage: View {
                     settingRow("Graph time window", detail: "One fixed time scale for all Performance graphs, including logical CPUs and GPU memory", symbol: "clock") {
                         StablePicker(title: "Graph time window", selection: $store.graphWindow, choices: GraphTimeWindow.allCases.map { ($0.label, $0) }).frame(width: 175)
                     }
-                    settingRow("Temperature graph", detail: "Overlay °C history on overall CPU and GPU utilization graphs. Summary temperatures are always shown.", symbol: "thermometer") {
+                    settingRow("Temperature graphs", detail: "Choose CPU and GPU overlays independently. Summary temperatures are always shown.", symbol: "thermometer") {
                         HStack(spacing: 8) {
-                            Toggle("Show temperature graph", isOn: $store.showTemperatureGraph).toggleStyle(.checkbox)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle("Show CPU temperature graph", isOn: $store.temperatureGraphs.cpu)
+                                Toggle("Show GPU temperature graph", isOn: $store.temperatureGraphs.gpu)
+                            }.toggleStyle(.checkbox)
                             Image(systemName: "info.circle").foregroundStyle(.secondary)
                                 .help(temperatureGuide).accessibilityLabel(temperatureGuide)
                         }

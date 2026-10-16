@@ -55,8 +55,8 @@ final class MonitorStore: ObservableObject {
         graphWindow.save(defaults)
         history = GraphHistory.visible(graphBuffer, seconds: graphWindow.rawValue)
     } }
-    @Published var showTemperatureGraph: Bool { didSet {
-        defaults.set(showTemperatureGraph, forKey: "showTemperatures.v1")
+    @Published var temperatureGraphs: TemperatureGraphPreferences { didSet {
+        temperatureGraphs.save(defaults)
     } }
     @Published private(set) var performanceVisibility: PerformanceVisibility
     @Published private(set) var gpuChartLayout: GPUChartLayout
@@ -102,7 +102,7 @@ final class MonitorStore: ObservableObject {
         performanceVisibility = PerformanceVisibility(defaults: defaults)
         gpuChartLayout = GPUChartLayout(defaults: defaults)
         graphWindow = GraphTimeWindow.load(defaults)
-        showTemperatureGraph = defaults.bool(forKey: "showTemperatures.v1")
+        temperatureGraphs = TemperatureGraphPreferences(defaults: defaults)
         let initialPage = ManagerPage(rawValue: defaults.string(forKey: "defaultStartPage") ?? "") ?? .processes
         defaultStartPage = initialPage
         page = initialPage

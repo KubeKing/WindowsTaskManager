@@ -117,7 +117,6 @@ struct PerformanceView: View {
             .help(store.snapshot.temperatures.note)
     }
     private func temperatureHistory(_ series: TemperatureSeries) -> [ResourcePlotOverlay] {
-        guard store.showTemperatureGraph else { return [] }
         return [ResourcePlotOverlay(values: store.history.map { series.value(in: $0) }, color: .green, dash: [5, 3], maximum: TemperatureScale.maximum, minimum: TemperatureScale.minimum, temperatureBands: true)]
     }
     private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
@@ -169,9 +168,9 @@ struct PerformanceView: View {
                 }
             } else {
                 axis("% Utilization", maximum: "100%")
-                ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue, overlays: temperatureHistory(.cpuAverage), temperatureAxis: store.showTemperatureGraph).frame(height: height)
+                ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue, overlays: store.temperatureGraphs.cpu ? temperatureHistory(.cpuAverage) : [], temperatureAxis: store.temperatureGraphs.cpu).frame(height: height)
                     .overlay(alignment: .topTrailing) {
-                        if store.showTemperatureGraph { temperatureOverlay(store.snapshot.temperatures.cpuAverageCelsius, label: "Temp · avg") }
+                        if store.temperatureGraphs.cpu { temperatureOverlay(store.snapshot.temperatures.cpuAverageCelsius, label: "Temp · avg") }
                     }
             }
             timeAxis
@@ -183,7 +182,7 @@ struct PerformanceView: View {
                 ]),
                 .action("Show kernel times", checked: store.showKernelTimes) { store.showKernelTimes.toggle() }
             ] + (store.cpuGraphLogical ? [] : [
-                .action("Show temperature graph", checked: store.showTemperatureGraph) { store.showTemperatureGraph.toggle() }
+                .action("Show temperature graph", checked: store.temperatureGraphs.cpu) { store.temperatureGraphs.cpu.toggle() }
             ])
         })
         let layout = width < 540 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20)) : AnyLayout(HStackLayout(alignment: .top, spacing: 30))
@@ -334,7 +333,7 @@ struct PerformanceView: View {
     private func gpuChart(slot: Int, id: String, memoryScale: UInt64, height: CGFloat) -> some View {
         let metric = store.gpuChartLayout.metrics[slot]
         let values = store.history.map { metric.value(in: $0.gpuByID[id]) }
-        let showsTemperature = store.showTemperatureGraph && metric == .utilization
+        let showsTemperature = store.temperatureGraphs.gpu && metric == .utilization
         return VStack(spacing: 5) {
             HStack(spacing: 8) {
                 GPUChartMetricMenu(slot: slot, selected: metric, gpu: gpu) { store.setGPUChartMetric($0, at: slot) }
@@ -357,7 +356,7 @@ struct PerformanceView: View {
                 .overlay {
                     if metric == .utilization {
                         StableContextMenu {
-                            [.action("Show temperature graph", checked: store.showTemperatureGraph) { store.showTemperatureGraph.toggle() }]
+                            [.action("Show temperature graph", checked: store.temperatureGraphs.gpu) { store.temperatureGraphs.gpu.toggle() }]
                         }
                     }
                 }
