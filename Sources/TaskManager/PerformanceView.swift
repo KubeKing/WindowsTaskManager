@@ -98,24 +98,44 @@ struct PerformanceView: View {
         return "\(MetricFormat.bytes(m.usageAvailable ? m.usedBytes : nil))/\(MetricFormat.bytes(m.totalBytes)) (\(MetricFormat.percent(m.usedPercent)))"
     }
     private func temperature(_ celsius: Double?) -> String { celsius.map { String(format: "%.1f °C", $0) } ?? "—" }
+    private func temperatureColor(_ band: TemperatureBand?) -> Color {
+        switch band {
+        case .safe: return .green
+        case .warm: return .yellow
+        case .hot: return .red
+        case .throttlingRisk, .thermalThrottling: return .purple
+        case nil: return .secondary
+        }
+    }
     private func temperatureOverlay(_ value: Double?, label: String = "Temp · avg") -> some View {
-        Text(label + " " + temperature(value)).font(.system(size: 10)).monospacedDigit()
+        let band = TemperatureBand.classify(value, pressure: store.snapshot.temperatures.thermalPressure)
+        return Text(label + " " + temperature(value) + (band.map { " · " + $0.label } ?? ""))
+            .font(.system(size: 10)).monospacedDigit().foregroundStyle(temperatureColor(band))
             .padding(.horizontal, 5).padding(.vertical, 3)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
-            .padding(5).allowsHitTesting(false)
-            .help(store.snapshot.temperatures.note)
+            .padding(5).padding(.trailing, 44).allowsHitTesting(false)
+            .help(temperatureGuide + " " + store.snapshot.temperatures.note)
     }
     private func temperatureHistory(_ series: TemperatureSeries) -> [ResourcePlotOverlay] {
         guard store.showTemperatureGraph else { return [] }
-        return [ResourcePlotOverlay(values: store.history.map { series.value(in: $0) }, color: .orange, dash: [5, 3], maximum: 150)]
+        return [ResourcePlotOverlay(values: store.history.map { series.value(in: $0) }, color: .green, dash: [5, 3], maximum: TemperatureScale.maximum, minimum: TemperatureScale.minimum, sampleColors: store.history.map { temperatureColor(TemperatureBand.classify(series.value(in: $0), pressure: $0.temperatures.thermalPressure)) })]
+    }
+    private var temperatureGuide: String {
+        "Temperature color guide: green below 60 °C; yellow 60–<80 °C; red 80–<100 °C; purple at 100 °C+ means throttling risk. Purple also indicates macOS serious/critical thermal pressure, which affects system performance and is not a per-core throttling measurement. These are display bands, not Apple hardware limits. Values outside 20–100 °C reach the chart edge; the badge retains the actual reading."
     }
     private func temperatureLegend(perCore: Bool = false) -> some View {
-        HStack {
-            Text(perCore ? "Temp per core · unavailable without verified mapping" : "┄ Temp · avg")
-            Spacer()
-            Text("0–150 °C")
-        }.font(.system(size: 10)).foregroundStyle(.orange)
-            .help("Orange dashed temperature history uses a separate fixed scale: 0 °C at the bottom, 150 °C at the top. Time matches utilization.")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                Text(perCore ? "Temp per core · unavailable without verified mapping" : "┄ Temp · avg")
+                Spacer(minLength: 0)
+                Text("Safe <60").foregroundStyle(.green)
+                Text("Warm 60–<80").foregroundStyle(.yellow)
+                Text("Hot 80–<100").foregroundStyle(.red)
+                Text("Throttling risk 100+ / system limiting").foregroundStyle(.purple)
+                Text("°C")
+            }
+            Text(perCore ? "Temp per core · unavailable · 20–100 °C" : "┄ Temp · avg · 20–100 °C · colors: Safe / Warm / Hot / Throttling risk")
+        }.font(.system(size: 10)).foregroundStyle(.secondary).help(temperatureGuide)
     }
     private func frequency(_ mhz: Double?) -> String { mhz.map { String(format: "%.2f GHz", $0 / 1000) } ?? "—" }
     private func diskSummary(_ disk: DiskMetrics) -> String {
@@ -157,7 +177,7 @@ struct PerformanceView: View {
                 let rows = (count + columns - 1) / columns
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                     ForEach(0..<count, id: \.self) { index in
-                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil, overlays: temperatureHistory(.logicalCore(index)))
+                        ResourcePlot(values: store.history.map { $0.logicalCPU.indices.contains(index) ? $0.logicalCPU[index] : nil }, dates: dates, secondValues: store.showKernelTimes ? store.history.map { $0.logicalKernel.indices.contains(index) ? $0.logicalKernel[index] : nil } : [], color: .blue, logical: true, logicalTitle: "CPU \(index + 1) · \(hardware.logicalCoreKinds[index]?.rawValue ?? "?")", currentUsage: store.snapshot.logicalCPUUsage.indices.contains(index) ? store.snapshot.logicalCPUUsage[index] : nil, overlays: temperatureHistory(.logicalCore(index)), temperatureAxis: store.showTemperatureGraph)
                         .frame(height: (height - CGFloat(rows - 1) * 8) / CGFloat(rows))
                         .overlay(alignment: .topTrailing) {
                             if store.showTemperatureGraph {
@@ -173,7 +193,7 @@ struct PerformanceView: View {
                 }
             } else {
                 axis("% Utilization", maximum: "100%")
-                ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue, overlays: temperatureHistory(.cpuAverage)).frame(height: height)
+                ResourcePlot(values: store.history.map(\.cpu), dates: dates, secondValues: store.showKernelTimes ? store.history.map(\.kernelCPU) : [], color: .blue, overlays: temperatureHistory(.cpuAverage), temperatureAxis: store.showTemperatureGraph).frame(height: height)
                     .overlay(alignment: .topTrailing) {
                         if store.showTemperatureGraph { temperatureOverlay(store.snapshot.temperatures.cpuAverageCelsius, label: "Temp · avg") }
                     }
@@ -300,7 +320,7 @@ struct PerformanceView: View {
         let id = gpu?.id ?? ""
         let peakMemory = store.history.compactMap { $0.gpuByID[id] }.flatMap { [$0.memoryInUseBytes, $0.memoryAllocatedBytes].compactMap { $0 } }.max() ?? 0
         let memoryScale = max(1, store.snapshot.memory.totalBytes, peakMemory)
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
             ForEach(0..<store.gpuChartLayout.metrics.count, id: \.self) { slot in
                 gpuChart(slot: slot, id: id, memoryScale: memoryScale, height: height / 2 - 22)
             }
@@ -345,7 +365,7 @@ struct PerformanceView: View {
                 Text(metric.isMemory ? MetricFormat.bytes(memoryScale) : "100%")
                     .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
             }
-            ResourcePlot(values: values, dates: dates, maximum: metric.isMemory ? Double(memoryScale) : 100, color: tint, overlays: showsTemperature ? temperatureHistory(.gpu(id)) : [])
+            ResourcePlot(values: values, dates: dates, maximum: metric.isMemory ? Double(memoryScale) : 100, color: tint, overlays: showsTemperature ? temperatureHistory(.gpu(id)) : [], temperatureAxis: showsTemperature)
                 .frame(height: height)
                 .overlay {
                     if !values.contains(where: { $0 != nil }) {
@@ -405,6 +425,8 @@ struct ResourcePlotOverlay {
     var color: Color
     var dash: [CGFloat] = []
     var maximum: Double? = nil
+    var minimum: Double = 0
+    var sampleColors: [Color] = []
 }
 
 struct ResourcePlot: View {
@@ -418,6 +440,7 @@ struct ResourcePlot: View {
     var logicalTitle: String? = nil
     var currentUsage: Double? = nil
     var overlays: [ResourcePlotOverlay] = []
+    var temperatureAxis = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.graphTimeWindow) private var graphWindow
     var body: some View {
@@ -431,43 +454,63 @@ struct ResourcePlot: View {
                 context.translateBy(x: 0, y: 16)
                 size.height = max(1, size.height - 16)
             }
+            if temperatureAxis {
+                size.width = max(1, size.width - 44)
+                for tick in TemperatureScale.ticks {
+                    let y = size.height * (1 - (TemperatureScale.position(tick) ?? 0))
+                    var mark = Path(); mark.move(to: CGPoint(x: size.width, y: y)); mark.addLine(to: CGPoint(x: size.width + 5, y: y))
+                    context.stroke(mark, with: .color(.secondary), lineWidth: 0.5)
+                    let label = Text("\(Int(tick)) °C").font(.system(size: 9)).monospacedDigit().foregroundColor(.secondary)
+                    context.draw(label, at: CGPoint(x: size.width + 8, y: y), anchor: tick == TemperatureScale.minimum ? .bottomLeading : tick == TemperatureScale.maximum ? .topLeading : .leading)
+                }
+            }
             // Stroke entirely inside the canvas: an edge-centered stroke is clipped.
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5)
             context.fill(Path(rect), with: .color(color.opacity(0.035)))
             var grid = Path()
             for i in 1..<10 { let x = rect.minX + rect.width * Double(i) / 10; grid.move(to: CGPoint(x: x, y: rect.minY)); grid.addLine(to: CGPoint(x: x, y: rect.maxY)) }
-            for i in 1..<5 { let y = rect.minY + rect.height * Double(i) / 5; grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y)) }
+            let divisions = temperatureAxis ? 4 : 5
+            for i in 1..<divisions { let y = rect.minY + rect.height * Double(i) / Double(divisions); grid.move(to: CGPoint(x: rect.minX, y: y)); grid.addLine(to: CGPoint(x: rect.maxX, y: y)) }
             context.stroke(grid, with: .color(color.opacity(compact ? 0.12 : scheme == .dark ? 0.24 : 0.18)), lineWidth: 0.5)
             context.clip(to: Path(CGRect(origin: .zero, size: size)))
             draw(values, size: size, context: &context, dashed: false)
             if !secondValues.isEmpty { draw(secondValues, size: size, context: &context, dashed: true) }
             for overlay in overlays {
-                draw(overlay.values, size: size, context: &context, dashed: true, lineColor: overlay.color, lineDash: overlay.dash, scaleMaximum: overlay.maximum)
+                draw(overlay.values, size: size, context: &context, dashed: true, lineColor: overlay.color, lineDash: overlay.dash, scaleMaximum: overlay.maximum, scaleMinimum: overlay.minimum, sampleColors: overlay.sampleColors)
             }
             context.stroke(Path(rect), with: .color(color.opacity(scheme == .dark ? 0.7 : 0.5)), lineWidth: 1)
         }
     }
-    private func draw(_ values: [Double?], size: CGSize, context: inout GraphicsContext, dashed: Bool, lineColor: Color? = nil, lineDash: [CGFloat]? = nil, scaleMaximum: Double? = nil) {
+    private func draw(_ values: [Double?], size: CGSize, context: inout GraphicsContext, dashed: Bool, lineColor: Color? = nil, lineDash: [CGFloat]? = nil, scaleMaximum: Double? = nil, scaleMinimum: Double = 0, sampleColors: [Color] = []) {
         guard values.count > 1 else { return }
         let capacity = max(values.count, compact ? 30 : 60)
         let timed = dates.count == values.count
         let timeline = GraphTimeline(end: dates.last ?? Date(timeIntervalSince1970: 0), window: graphWindow)
-        var segments: [[CGPoint]] = []
+        var segments: [(points: [CGPoint], color: Color?)] = []
         var segment: [CGPoint] = []
+        var segmentColor: Color? = nil
         for (index, value) in values.enumerated() {
             let gap = timed && index > 0 && dates[index].timeIntervalSince(dates[index - 1]) > 6
             if gap || value == nil || value?.isFinite == false {
-                if !segment.isEmpty { segments.append(segment); segment.removeAll(keepingCapacity: true) }
+                if !segment.isEmpty { segments.append((segment, segmentColor)); segment.removeAll(keepingCapacity: true) }
             }
             guard let value, value.isFinite else { continue }
             let fraction = timed ? timeline.position(dates[index]) : Double(capacity - values.count + index) / Double(capacity - 1)
             guard let fraction else { continue }
             let x = size.width * fraction
-            let y = size.height * (1 - min(1, max(0, value / max(1, scaleMaximum ?? maximum))))
+            // Keep independent-axis overlay strokes visible at both bounds.
+            let inset = scaleMaximum == nil ? 0 : min(1.5, size.height / 2)
+            let y = inset + (size.height - 2 * inset) * (1 - min(1, max(0, (value - scaleMinimum) / max(1, (scaleMaximum ?? maximum) - scaleMinimum))))
+            let sampleColor = sampleColors.indices.contains(index) ? sampleColors[index] : lineColor
+            if !segment.isEmpty, sampleColor != segmentColor, let previous = segment.last {
+                segments.append((segment, segmentColor)); segment = [previous]
+            }
+            segmentColor = sampleColor
             segment.append(CGPoint(x: x, y: y))
         }
-        if !segment.isEmpty { segments.append(segment) }
-        for points in segments {
+        if !segment.isEmpty { segments.append((segment, segmentColor)) }
+        for segment in segments {
+            let points = segment.points
             guard points.count > 1, let first = points.first, let last = points.last else { continue }
             var line = Path(); line.move(to: first)
             points.dropFirst().forEach { line.addLine(to: $0) }
@@ -475,7 +518,7 @@ struct ResourcePlot: View {
                 var fill = line; fill.addLine(to: CGPoint(x: last.x, y: size.height)); fill.addLine(to: CGPoint(x: first.x, y: size.height)); fill.closeSubpath()
                 context.fill(fill, with: .linearGradient(Gradient(colors: [color.opacity(0.22), color.opacity(0.025)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
             }
-            context.stroke(line, with: .color((lineColor ?? color).opacity(lineColor != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : logical ? 1.2 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
+            context.stroke(line, with: .color((segment.color ?? color).opacity(segment.color != nil ? 0.95 : dashed ? 0.55 : 0.9)), style: StrokeStyle(lineWidth: compact ? 1 : logical ? 1.2 : 1.6, lineJoin: .round, dash: lineDash ?? (dashed ? [4, 3] : [])))
         }
     }
 }

@@ -81,6 +81,7 @@ public final class SystemSampler {
         if includeTemperatures {
             if temperatureSampler == nil { temperatureSampler = TemperatureSampler() }
             result.temperatures = temperatureSampler!.sample(now: started)
+            result.temperatures.thermalPressure = ThermalPressure.current()
             // SMC zones describe the integrated Apple GPU, never an arbitrary
             // adapter. Without a unique association keep that device unavailable.
             if result.gpus.count != 1 || !result.gpus[0].name.hasPrefix("Apple") {

@@ -11,6 +11,7 @@ public struct TemperatureMetrics: Sendable {
     // Thermal zone enumeration is never a mapping to OS logical core IDs.
     public var logicalCoreCelsius: [Int: Double] = [:]
     public var sampledAt: Date? = nil
+    public var thermalPressure: ThermalPressure = .unknown
     public var note = "Experimental average of readable Apple silicon CPU/GPU die sensors; individual-core mapping is unavailable."
     public init() {}
 }

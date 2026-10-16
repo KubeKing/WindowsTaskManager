@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Use a fixed configurable 30-second to 10-minute time window across every Performance graph; new samples scroll without compressing history.
-- Always show native CPU/GPU **Temp · avg** summaries beside Utilization. A saved graph-only toggle adds orange dashed temperature history with a separate 0–150 °C scale; sampling continues while hidden. Per-core values remain unavailable without verified mappings; no admin helper or external dependency.
+- Always show native CPU/GPU **Temp · avg** summaries beside Utilization. A saved graph-only toggle adds temperature-colored dashed history with a separate 20–100 °C scale and five labeled ticks; sampling continues while hidden. Per-core values remain unavailable without verified mappings; no admin helper or external dependency.
 
 ## 1.1.0 — 2026-10-14
 
