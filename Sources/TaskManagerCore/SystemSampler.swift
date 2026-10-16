@@ -45,7 +45,9 @@ public final class SystemSampler {
         let state = pressureState
         source.setEventHandler { [weak source] in
             guard let event = source?.data else { return }
-            state.set(event.contains(.critical) ? "Critical" : event.contains(.warning) ? "Warning" : "Normal")
+            if event.contains(.critical) { state.set("Critical") }
+            else if event.contains(.warning) { state.set("Warning") }
+            else if event.contains(.normal) { state.set("Normal") }
         }
         pressureSource = source
         source.activate()

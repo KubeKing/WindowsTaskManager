@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a native green/yellow/red memory-pressure history graph with the shared graph window and explicit unavailable gaps.
+
 - Use a fixed configurable 30-second to 10-minute time window across every Performance graph; new samples scroll without compressing history.
 - Always show native CPU/GPU **Temp · avg** summaries beside Utilization. A saved graph-only toggle adds temperature-colored dashed history with a separate 20–100 °C scale and five labeled ticks; sampling continues while hidden. Logical processor charts omit temperature UI; GPU temperature appears only in utilization boxes. The color guide lives in Settings rather than chart footers. No admin helper or external dependency.
 
