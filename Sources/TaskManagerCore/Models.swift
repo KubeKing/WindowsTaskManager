@@ -55,6 +55,9 @@ public struct MemoryMetrics: Sendable {
     /// Completely free pages; excludes speculative pages.
     public var freeBytes: UInt64? = nil
     public var pressure: String = "Unknown"
+    /// Activity Monitor's granular pressure height: 100 minus the kernel's
+    /// available-memory level. Independent of used RAM and the pressure color.
+    public var pressurePercent: Double? = nil
     public var pressureLevel: MemoryPressureLevel? { MemoryPressureLevel(rawValue: pressure) }
     public var usedPercent: Double? { usageAvailable && totalBytes > 0 ? Double(usedBytes) / Double(totalBytes) * 100 : nil }
     public init() {}
@@ -152,6 +155,7 @@ public struct HistoryPoint: Identifiable, Sendable {
     public var cpu: Double?
     public var memory: Double?
     public var memoryPressure: MemoryPressureLevel?
+    public var memoryPressurePercent: Double?
     public var totalMemoryBytes: UInt64?
     public var systemUsedMemoryBytes: UInt64?
     public var networkReceived: Double?
@@ -168,6 +172,7 @@ public struct HistoryPoint: Identifiable, Sendable {
     public init(snapshot: SystemSnapshot) {
         timestamp = snapshot.timestamp; cpu = snapshot.cpuUsage; memory = snapshot.memory.usedPercent
         memoryPressure = snapshot.memory.pressureLevel
+        memoryPressurePercent = snapshot.memory.pressurePercent
         totalMemoryBytes = snapshot.memory.totalBytes > 0 ? snapshot.memory.totalBytes : nil
         systemUsedMemoryBytes = snapshot.memory.usageAvailable ? snapshot.memory.usedBytes : nil
         temperatures = snapshot.temperatures

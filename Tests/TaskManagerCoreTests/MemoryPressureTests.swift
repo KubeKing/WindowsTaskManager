@@ -2,6 +2,29 @@ import Testing
 @testable import TaskManagerCore
 
 struct MemoryPressureTests {
+    @Test func convertsKernelAvailableLevelToActivityMonitorPressure() {
+        #expect(MemoryPressureMath.percent(availablePercent: 48) == 52)
+        #expect(MemoryPressureMath.percent(availablePercent: 100) == 0)
+        #expect(MemoryPressureMath.percent(availablePercent: 0) == 100)
+        #expect(MemoryPressureMath.percent(availablePercent: -1) == nil)
+        #expect(MemoryPressureMath.percent(availablePercent: 101) == nil)
+    }
+
+    @Test func historyRetainsGranularChangesWithinTheSamePressureState() {
+        var snapshot = SystemSnapshot()
+        snapshot.memory.pressure = "Normal"
+        snapshot.memory.pressurePercent = 37
+        let first = HistoryPoint(snapshot: snapshot)
+        snapshot.memory.pressurePercent = 41
+        let next = HistoryPoint(snapshot: snapshot)
+        #expect(first.memoryPressure == .normal)
+        #expect(next.memoryPressure == .normal)
+        #expect(first.memoryPressurePercent == 37)
+        #expect(next.memoryPressurePercent == 41)
+        snapshot.memory.pressurePercent = nil
+        #expect(HistoryPoint(snapshot: snapshot).memoryPressurePercent == nil)
+    }
+
     @Test func recordsReportedPressureIndependentlyOfMemoryUsage() {
         var snapshot = SystemSnapshot()
         snapshot.memory.usageAvailable = true

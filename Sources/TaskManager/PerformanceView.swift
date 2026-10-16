@@ -225,7 +225,7 @@ struct PerformanceView: View {
     @ViewBuilder private func memoryContent(height: CGFloat, width: CGFloat) -> some View {
         let m = store.snapshot.memory
         graph("Memory usage", maximumLabel: MetricFormat.bytes(m.totalBytes), values: store.history.map { $0.memory.map { $0 * Double(m.totalBytes) / 100 } }, maximum: Double(m.totalBytes), height: max(160, height - 85))
-        MemoryPressurePlot(history: store.history, current: m.pressureLevel)
+        MemoryPressurePlot(history: store.history, current: m.pressureLevel, currentPercent: m.pressurePercent)
             .frame(height: 105)
         timeAxis
         Text("Memory composition").font(.system(size: 11)).foregroundStyle(.secondary)

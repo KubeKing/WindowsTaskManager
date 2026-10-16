@@ -28,6 +28,7 @@ public final class SystemSampler {
     private var interfaceNames: [String: String] = [:]
     private var lastInterfaceRefresh = -Double.infinity
     private let pressureState = PressureState()
+    private let memoryPressureSampler = MemoryPressureSampler()
     private var pressureSource: DispatchSourceMemoryPressure?
 
     private final class PressureState: @unchecked Sendable {
@@ -252,6 +253,7 @@ public final class SystemSampler {
         var size = MemoryLayout<xsw_usage>.size
         if sysctlbyname("vm.swapusage", &swap, &size, nil, 0) == 0 { result.swapUsedBytes = swap.xsu_used; result.swapAvailable = true }
         result.pressure = pressureState.get()
+        result.pressurePercent = memoryPressureSampler.sample()
         var pressure: Int32 = 0
         size = MemoryLayout<Int32>.size
         if sysctlbyname("kern.memorystatus_vm_pressure_level", &pressure, &size, nil, 0) == 0 {

@@ -202,6 +202,7 @@ final class MonitorStore: ObservableObject {
             var gap = HistoryPoint(snapshot: value)
             gap.timestamp = pauseGap; gap.cpu = nil; gap.memory = nil; gap.logicalCPU = []
             gap.memoryPressure = nil
+            gap.memoryPressurePercent = nil
             gap.totalMemoryBytes = nil; gap.systemUsedMemoryBytes = nil
             gap.temperatures = TemperatureMetrics()
             gap.kernelCPU = nil; gap.logicalKernel = []; gap.networkByID = [:]; gap.diskByID = [:]; gap.gpuByID = [:]
