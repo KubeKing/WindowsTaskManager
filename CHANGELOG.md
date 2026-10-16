@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add the saved Show temperature graph toggle to GPU utilization charts’ stable right-click menus; bottom temperature summaries remain visible.
+
 - Color temperature dashes at the exact 60/80/100 °C chart boundaries with a continuous dash pattern, avoiding hotter colors extending into cooler tails.
 
 - Add a granular memory-pressure curve using Activity Monitor’s native kernel reading and fixed 0–100 scale, with independent green/yellow/red pressure-state colors, the shared graph window and explicit unavailable gaps.

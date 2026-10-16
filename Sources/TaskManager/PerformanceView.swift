@@ -354,7 +354,14 @@ struct PerformanceView: View {
                         temperatureOverlay(store.snapshot.temperatures.gpuID == id ? store.snapshot.temperatures.gpuAverageCelsius : nil)
                     }
                 }
-                .help(metric.value(in: gpu) == nil ? metric.unavailableReason : metric.title)
+                .overlay {
+                    if metric == .utilization {
+                        StableContextMenu {
+                            [.action("Show temperature graph", checked: store.showTemperatureGraph) { store.showTemperatureGraph.toggle() }]
+                        }
+                    }
+                }
+                .help((metric.value(in: gpu) == nil ? metric.unavailableReason : metric.title) + (metric == .utilization ? ". Right-click to show or hide the temperature graph; the summary reading stays visible." : ""))
                 .accessibilityLabel("GPU chart \(slot + 1): \(metric.title)")
             timeAxis
         }
